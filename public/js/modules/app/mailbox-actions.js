@@ -11,6 +11,15 @@ import { startAutoRefresh, stopAutoRefresh } from './auto-refresh.js';
 import { resetPager } from './email-list.js';
 import { resetMbPage } from './mailbox-list.js';
 
+function showMailboxCreatedToast(showToast, baseMessage, routing) {
+  const routingMessage = String(routing?.message || '').trim();
+  if (routing?.enabled && routingMessage) {
+    showToast(`${baseMessage} ${routingMessage}`, 'success');
+    return;
+  }
+  showToast(baseMessage, 'success');
+}
+
 /**
  * 生成随机邮箱
  * @param {object} elements - DOM 元素
@@ -49,7 +58,7 @@ export async function generateMailbox(elements, lenRange, domainSelect, api, sho
       }
     } catch(_) {}
     
-    showToast('邮箱生成成功！', 'success');
+    showMailboxCreatedToast(showToast, '邮箱生成成功！', data.routing);
     startAutoRefresh(autoRefreshCallback);
     await refresh();
     
@@ -105,7 +114,7 @@ export async function generateNameMailbox(elements, lenRange, domainSelect, api,
       }
     } catch(_) {}
     
-    showToast('随机人名邮箱生成成功！', 'success');
+    showMailboxCreatedToast(showToast, '随机人名邮箱生成成功！', data.routing);
     startAutoRefresh(autoRefreshCallback);
     await refresh();
     
@@ -150,7 +159,7 @@ export async function createCustomMailbox(elements, domainSelect, api, showToast
     updateEmailDisplay(elements, data.email);
     if (customOverlay) customOverlay.style.display = 'none';
     
-    showToast('已创建邮箱：' + data.email, 'success');
+    showMailboxCreatedToast(showToast, `已创建邮箱：${data.email}`, data.routing);
     await loadMailboxes({ forceFresh: true });
   } catch(e) {
     showToast(e.message || '创建失败', 'error');

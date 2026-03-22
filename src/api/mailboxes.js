@@ -11,9 +11,14 @@ import {
   getOrCreateMailboxId,
   toggleMailboxPin,
   getTotalMailboxCount,
-  assignMailboxToUser
+  assignMailboxToUser,
+  setMailboxRoutingRuleId
 } from '../db/index.js';
 import { handleMailboxAdminApi } from './mailboxAdmin.js';
+import {
+  ensureWorkerRouteForMailbox,
+  deleteWorkerRouteForMailbox
+} from '../integrations/cloudflare-email-routing.js';
 
 /**
  * 处理邮箱管理相关 API
@@ -47,12 +52,13 @@ export async function handleMailboxesApi(request, db, mailDomains, url, path, op
     if (!isMock) {
       try {
         const payload = getJwtPayload(request, options);
-        if (payload?.userId) {
-          await assignMailboxToUser(db, { userId: payload.userId, address: email });
-          return Response.json({ email, expires: Date.now() + 3600000 });
-        }
-        await getOrCreateMailboxId(db, email);
-        return Response.json({ email, expires: Date.now() + 3600000 });
+        const result = await createMailboxWithOptionalRoute({
+          db,
+          email,
+          env: options?.env,
+          userId: payload?.userId || 0,
+        });
+        return Response.json({ email, expires: Date.now() + 3600000, routing: result.routing });
       } catch (e) {
         return errorResponse(String(e?.message || '创建失败'), 400);
       }
@@ -88,13 +94,13 @@ export async function handleMailboxesApi(request, db, mailDomains, url, path, op
       
       try {
         const payload = getJwtPayload(request, options);
-        const userId = payload?.userId;
-        if (userId) {
-          await assignMailboxToUser(db, { userId, address: email });
-        } else {
-          await getOrCreateMailboxId(db, email);
-        }
-        return Response.json({ email, expires: Date.now() + 3600000 });
+        const result = await createMailboxWithOptionalRoute({
+          db,
+          email,
+          env: options?.env,
+          userId: payload?.userId || 0,
+        });
+        return Response.json({ email, expires: Date.now() + 3600000, routing: result.routing });
       } catch (e) {
         return errorResponse(String(e?.message || '创建失败'), 400);
       }
@@ -433,4 +439,31 @@ export async function handleMailboxesApi(request, db, mailDomains, url, path, op
   if (adminResult) return adminResult;
 
   return null;
+}
+
+async function createMailboxWithOptionalRoute({ db, email, env, userId = 0 }) {
+  const routing = await ensureWorkerRouteForMailbox(email, env);
+
+  try {
+    if (userId) {
+      await assignMailboxToUser(db, { userId, address: email });
+    } else {
+      await getOrCreateMailboxId(db, email);
+    }
+
+    if (routing?.ruleId) {
+      await setMailboxRoutingRuleId(db, email, routing.ruleId);
+    }
+
+    return { email, routing };
+  } catch (error) {
+    if (routing?.created) {
+      try {
+        await deleteWorkerRouteForMailbox(email, env, routing.ruleId || '');
+      } catch (_) {
+        // 回滚 Cloudflare 规则失败时保留原始业务错误。
+      }
+    }
+    throw error;
+  }
 }

@@ -137,8 +137,6 @@ export async function listUsersWithCounts(db, { limit = 50, offset = 0, sort = '
 export async function assignMailboxToUser(db, { userId = null, username = null, address }) {
   const normalized = String(address || '').trim().toLowerCase();
   if (!normalized) throw new Error('邮箱地址无效');
-  // 查询或创建邮箱
-  const mailboxId = await getOrCreateMailboxId(db, normalized);
 
   // 获取用户 ID
   let uid = userId;
@@ -150,9 +148,22 @@ export async function assignMailboxToUser(db, { userId = null, username = null, 
     uid = r.results[0].id;
   }
 
+  const existingMailboxId = await getMailboxIdByAddress(db, normalized);
+  if (existingMailboxId) {
+    const existingBind = await db.prepare(
+      'SELECT 1 FROM user_mailboxes WHERE user_id = ? AND mailbox_id = ? LIMIT 1'
+    ).bind(uid, existingMailboxId).all();
+    if (existingBind?.results?.length) {
+      return { success: true, mailboxId: existingMailboxId, alreadyAssigned: true };
+    }
+  }
+
   // 使用缓存校验上限
   const quota = await getCachedUserQuota(db, uid);
   if (quota.used >= quota.limit) throw new Error('已达到邮箱上限');
+
+  // 查询或创建邮箱
+  const mailboxId = existingMailboxId || await getOrCreateMailboxId(db, normalized);
 
   // 绑定（唯一约束避免重复）
   await db.prepare('INSERT OR IGNORE INTO user_mailboxes (user_id, mailbox_id) VALUES (?, ?)').bind(uid, mailboxId).run();
@@ -160,7 +171,7 @@ export async function assignMailboxToUser(db, { userId = null, username = null, 
   // 使缓存失效，下次查询时会重新获取
   invalidateUserQuotaCache(uid);
   
-  return { success: true };
+  return { success: true, mailboxId };
 }
 
 /**

@@ -243,7 +243,8 @@ async function delegateApiRequest(context) {
       resendApiKey: RESEND_API_KEY,
       adminName: ADMIN_NAME,
       r2: env.MAIL_EML,
-      authPayload
+      authPayload,
+      env
     });
   }
 
@@ -255,7 +256,8 @@ async function delegateApiRequest(context) {
       adminName: ADMIN_NAME,
       r2: env.MAIL_EML,
       authPayload,
-      mailboxOnly: true
+      mailboxOnly: true,
+      env
     });
   }
 
@@ -264,7 +266,8 @@ async function delegateApiRequest(context) {
     resendApiKey: RESEND_API_KEY,
     adminName: ADMIN_NAME,
     r2: env.MAIL_EML,
-    authPayload
+    authPayload,
+    env
   });
 }
 

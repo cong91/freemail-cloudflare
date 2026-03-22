@@ -17,7 +17,8 @@ CREATE TABLE IF NOT EXISTS mailboxes (
   is_pinned INTEGER DEFAULT 0,
   can_login INTEGER DEFAULT 0,
   forward_to TEXT DEFAULT NULL,
-  is_favorite INTEGER DEFAULT 0
+  is_favorite INTEGER DEFAULT 0,
+  routing_rule_id TEXT DEFAULT NULL
 );
 
 -- 邮件消息表

@@ -188,3 +188,19 @@ export async function getForwardTarget(db, address) {
   
   return result?.forward_to || null;
 }
+
+/**
+ * 更新邮箱关联的 Cloudflare 路由规则 ID
+ * @param {object} db - 数据库连接对象
+ * @param {string} address - 邮箱地址
+ * @param {string|null} ruleId - 路由规则 ID
+ * @returns {Promise<void>}
+ */
+export async function setMailboxRoutingRuleId(db, address, ruleId) {
+  const normalized = String(address || '').trim().toLowerCase();
+  if (!normalized) return;
+
+  await db.prepare(
+    'UPDATE mailboxes SET routing_rule_id = ? WHERE address = ?'
+  ).bind(ruleId || null, normalized).run();
+}

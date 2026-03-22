@@ -5,7 +5,6 @@
 
 import { getJwtPayload, isStrictAdmin, sha256Hex, errorResponse } from './helpers.js';
 import { invalidateMailboxCache, invalidateSystemStatCache } from '../utils/cache.js';
-import { getMailboxIdByAddress } from '../db/index.js';
 import {
   handleSetForward,
   handleToggleFavorite,
@@ -14,6 +13,11 @@ import {
   handleBatchFavoriteByAddress,
   handleBatchForwardByAddress
 } from './mailboxSettings.js';
+import {
+  deleteWorkerRouteForMailbox,
+  ensureWorkerRouteForMailbox
+} from '../integrations/cloudflare-email-routing.js';
+import { setMailboxRoutingRuleId } from '../db/index.js';
 
 /**
  * 处理邮箱管理员相关 API
@@ -27,6 +31,89 @@ import {
 export async function handleMailboxAdminApi(request, db, url, path, options) {
   const isMock = !!options.mockOnly;
 
+  if (path === '/api/admin/backfill-routing' && request.method === 'POST') {
+    if (isMock) return errorResponse('演示模式不可操作', 403);
+    if (!isStrictAdmin(request, options)) return errorResponse('Forbidden', 403);
+
+    try {
+      const body = await request.json().catch(() => ({}));
+      const limit = Math.max(1, Math.min(200, Number(body?.limit || url.searchParams.get('limit') || 100)));
+      const providedAddresses = Array.isArray(body?.addresses)
+        ? body.addresses
+        : [];
+      const addresses = [...new Set(
+        providedAddresses
+          .map((item) => String(item || '').trim().toLowerCase())
+          .filter(Boolean)
+      )];
+
+      let rows = [];
+      if (addresses.length > 0) {
+        const placeholders = addresses.map(() => '?').join(', ');
+        const query = `
+          SELECT id, address, routing_rule_id
+          FROM mailboxes
+          WHERE address IN (${placeholders})
+          ORDER BY id ASC
+          LIMIT ?
+        `;
+        const result = await db.prepare(query).bind(...addresses, limit).all();
+        rows = result?.results || [];
+      } else {
+        const result = await db.prepare(`
+          SELECT id, address, routing_rule_id
+          FROM mailboxes
+          WHERE routing_rule_id IS NULL OR routing_rule_id = ''
+          ORDER BY id ASC
+          LIMIT ?
+        `).bind(limit).all();
+        rows = result?.results || [];
+      }
+
+      const results = [];
+      let successCount = 0;
+      let failureCount = 0;
+
+      for (const row of rows) {
+        const address = String(row?.address || '').trim().toLowerCase();
+        if (!address) continue;
+
+        try {
+          const routing = await ensureWorkerRouteForMailbox(address, options?.env || {});
+          if (routing?.ruleId) {
+            await setMailboxRoutingRuleId(db, address, routing.ruleId);
+          }
+
+          successCount += 1;
+          results.push({
+            address,
+            success: true,
+            status: routing?.status || 'ok',
+            rule_id: routing?.ruleId || row?.routing_rule_id || null,
+            message: routing?.message || '',
+          });
+        } catch (error) {
+          failureCount += 1;
+          results.push({
+            address,
+            success: false,
+            error: String(error?.message || '回填失败'),
+          });
+        }
+      }
+
+      return Response.json({
+        success: failureCount === 0,
+        processed: results.length,
+        success_count: successCount,
+        failure_count: failureCount,
+        results,
+      });
+    } catch (error) {
+      return errorResponse(`回填失败${error?.message ? `: ${error.message}` : ''}`, 500);
+    }
+  }
+
   // 删除邮箱
   if (path === '/api/mailboxes' && request.method === 'DELETE') {
     if (isMock) return errorResponse('演示模式不可删除', 403);
@@ -34,7 +121,10 @@ export async function handleMailboxAdminApi(request, db, url, path, options) {
     if (!raw) return errorResponse('缺少 address 参数', 400);
     const normalized = String(raw || '').trim().toLowerCase();
     try {
-      const mailboxId = await getMailboxIdByAddress(db, normalized);
+      const mailbox = await db.prepare(
+        'SELECT id, routing_rule_id FROM mailboxes WHERE address = ? LIMIT 1'
+      ).bind(normalized).first();
+      const mailboxId = mailbox?.id || 0;
       if (!mailboxId) return new Response(JSON.stringify({ success: false, message: '邮箱不存在' }), { status: 404 });
 
       if (!isStrictAdmin(request, options)) {
@@ -43,6 +133,15 @@ export async function handleMailboxAdminApi(request, db, url, path, options) {
         const own = await db.prepare('SELECT 1 FROM user_mailboxes WHERE user_id = ? AND mailbox_id = ? LIMIT 1')
           .bind(Number(payload.userId), mailboxId).all();
         if (!own?.results?.length) return errorResponse('Forbidden', 403);
+      }
+
+      const routeCleanup = await deleteWorkerRouteForMailbox(
+        normalized,
+        options?.env || {},
+        mailbox?.routing_rule_id || ''
+      );
+      if (routeCleanup?.enabled && routeCleanup?.status === 'foreign_rule') {
+        return errorResponse('该邮箱在 Cloudflare 中存在非当前 Worker 的规则，请先手动删除该规则', 409);
       }
 
       try { await db.exec('BEGIN'); } catch (_) { }
@@ -57,10 +156,10 @@ export async function handleMailboxAdminApi(request, db, url, path, options) {
         invalidateSystemStatCache('total_mailboxes');
       }
 
-      return Response.json({ success: deleted, deleted });
+      return Response.json({ success: deleted, deleted, routing: routeCleanup || null });
     } catch (e) {
       try { await db.exec('ROLLBACK'); } catch (_) { }
-      return errorResponse('删除失败', 500);
+      return errorResponse(`删除失败${e?.message ? `: ${e.message}` : ''}`, 500);
     }
   }
 

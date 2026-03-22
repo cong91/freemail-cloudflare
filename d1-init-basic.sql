@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS mailboxes (
   expires_at TEXT,
   is_pinned INTEGER DEFAULT 0,
   forward_to TEXT DEFAULT NULL,
-  is_favorite INTEGER DEFAULT 0
+  is_favorite INTEGER DEFAULT 0,
+  routing_rule_id TEXT DEFAULT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_mailboxes_address ON mailboxes(address);
