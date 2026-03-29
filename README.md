@@ -180,6 +180,38 @@ node scripts/deploy-cloudflare.mjs ^
 | `CLOUDFLARE_GLOBAL_API_KEY`       | Global API Key                                 |
 | `CLOUDFLARE_EMAIL_ROUTING_WORKER` | Worker đích khi tự động tạo quy tắc định tuyến |
 
+### Cấu hình đa vùng (multi-zone) cho nhiều domain
+
+Khi `MAIL_DOMAIN` chứa nhiều domain thuộc các zone Cloudflare khác nhau, khai báo map theo domain bằng JSON trong `MAIL_DOMAIN_ZONE_MAP` (hoặc alias `CLOUDFLARE_ZONE_MAP`).
+
+Ví dụ:
+
+```bash
+MAIL_DOMAIN="a.example.com,b.example.net"
+MAIL_DOMAIN_ZONE_MAP='{
+  "a.example.com": {
+    "zoneId": "zone-id-for-example-com",
+    "apiToken": "token-for-zone-a",
+    "workerName": "freemail"
+  },
+  "b.example.net": {
+    "zoneId": "zone-id-for-example-net",
+    "apiEmail": "you@example.net",
+    "globalApiKey": "global-key-for-zone-b",
+    "workerName": "freemail"
+  }
+}'
+```
+
+Mỗi entry domain hỗ trợ:
+
+- `zoneId` (bắt buộc nếu khai báo entry)
+- `apiToken` **hoặc** `apiEmail + globalApiKey`
+- `workerName` (tùy chọn, fallback `CLOUDFLARE_EMAIL_ROUTING_WORKER` global)
+- `accountId` (tùy chọn)
+
+Nếu domain không có entry trong map, hệ thống fallback về cấu hình global hiện có (`CLOUDFLARE_ZONE_ID` + auth + worker), giữ tương thích ngược.
+
 ## Việc cần làm sau khi hoàn thành lần triển khai đầu tiên
 
 ### Mẫu tên miền gốc
