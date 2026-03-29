@@ -95,16 +95,17 @@ export function extractEmail(addr) {
  * 规则：
  * - 只输出 [a-z0-9._-]
  * - 通过姓名/中性词模式组合，不生成高熵乱码
- * - 保持长度参数兼容（默认 8）
+ * - 保持长度参数兼容（省略 length 时随机 12-16）
  *
- * @param {number} length - ID长度，默认为8
+ * @param {number} length - ID长度，省略时随机 12-16
  * @param {() => number} rng - 随机函数，默认 Math.random（用于可测性）
  * @returns {string} 随机生成的ID字符串
  */
-export function generateRandomId(length = 8, rng = Math.random) {
+export function generateRandomId(length, rng = Math.random) {
+	const randomDefaultLength = 12 + Math.floor(rng() * 5);
 	const desiredLength = Number.isFinite(length)
 		? Math.max(1, Math.min(64, Math.floor(length)))
-		: 8;
+		: randomDefaultLength;
 
 	const first = pickPlausibleName(FIRST_NAME_POOL, rng);
 	const last = pickPlausibleName(LAST_NAME_POOL, rng);
@@ -303,37 +304,64 @@ function shortenHumanLike(base, desiredLength) {
 function extendHumanLike(base, desiredLength, rng) {
 	let out = base;
 	const numericSuffixes = getNaturalNumericSuffixes();
-	const yearSuffixes = SOFT_YEAR_SUFFIXES.map((v) => v.slice(-2)).filter(
-		(v) => /^\d{2}$/.test(v) && v !== "00",
-	);
+
+	const remainingAtStart = desiredLength - out.length;
+	const alreadyHasDigitsAtStart = /\d/.test(out);
+
+	if (!alreadyHasDigitsAtStart && remainingAtStart >= 2) {
+		const padLen = remainingAtStart - 2;
+		const numericSuffix = pick(numericSuffixes, rng) || "21";
+		if (padLen > 0) {
+			out += buildNaturalPad(out, padLen);
+		}
+		out += numericSuffix;
+		return sanitizeLocalPart(out).slice(0, desiredLength);
+	}
 
 	while (out.length < desiredLength) {
 		const remaining = desiredLength - out.length;
-		const numericCandidates = [...yearSuffixes, ...numericSuffixes].filter(
-			(item) => item.length <= remaining,
-		);
 
-		if (numericCandidates.length === 0 && remaining <= 0) break;
-
-		const alreadyHasDigits = /\d/.test(out);
-		const exactNumeric = numericCandidates.filter(
-			(item) => item.length === remaining,
-		);
-
-		let suffix = "";
-		if (exactNumeric.length > 0 && !alreadyHasDigits) {
-			suffix = pick(exactNumeric, rng);
-		} else if (!alreadyHasDigits && remaining === 2 && rng() < 0.45) {
-			suffix = pick(numericCandidates, rng);
-		} else {
-			suffix = "a";
-		}
+		const suffix = buildNaturalPad(out, Math.min(remaining, 2));
 
 		if (!suffix) break;
 		out += suffix.slice(0, remaining);
 	}
 
 	return sanitizeLocalPart(out).slice(0, desiredLength);
+}
+
+function buildNaturalPad(base, length) {
+	if (length <= 0) return "";
+	const tokens = String(base || "")
+		.split(/[._-]/)
+		.filter(Boolean);
+	const tail = (tokens[tokens.length - 1] || "").replace(/[^a-z]/g, "");
+	const allLetters = String(base || "").replace(/[^a-z]/g, "");
+	const source = (tail || allLetters || "mail").toLowerCase();
+
+	if (!source) return "";
+
+	let out = "";
+	let i = 0;
+	let guard = 0;
+	while (out.length < length && guard < 256) {
+		const ch = source[i % source.length];
+		const prev = out[out.length - 1] || allLetters[allLetters.length - 1] || "";
+		if (source.length > 1 && ch === prev) {
+			i += 1;
+			guard += 1;
+			continue;
+		}
+		out += ch;
+		i += 1;
+		guard += 1;
+	}
+
+	if (out.length < length) {
+		out = out.padEnd(length, "m");
+	}
+
+	return out.slice(0, length);
 }
 
 function getNaturalNumericSuffixes() {
