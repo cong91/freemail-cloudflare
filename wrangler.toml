@@ -1,11 +1,15 @@
-name = "freemail"
+name = "freemail-mrc"
 main = "src/server.js"
 compatibility_date = "2024-01-01"
+account_id = "4252850db63fa48aed439e8a48129f50"
+workers_dev = true
+# Custom route removed for this account because zone linkto.com.vn is not present here.
+# Deploy via workers.dev in the current runtime/account.
 
 [[d1_databases]]
 binding = "TEMP_MAIL_DB"
-database_name = "freemail-db"
-database_id = "replace-with-your-d1-database-id"
+database_name = "freemail-mrc-db"
+database_id = "52390270-24d3-4d64-96ff-f8f2c0b26181"
 
 [vars]
 # FORWARD_RULES = "[{\"prefix\":\"vip\",\"email\":\"a@example.com\"},{\"prefix\":\"*\",\"email\":\"fallback@example.com\"}]"
@@ -16,7 +20,7 @@ binding = "ASSETS"
 
 [[r2_buckets]]
 binding = "MAIL_EML"
-bucket_name = "replace-with-your-r2-bucket-name"
+bucket_name = "freemail-mrc-eml-mna4oyb4"
 
 # [observability.logs]
 # enabled = true
