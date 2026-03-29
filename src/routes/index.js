@@ -8,6 +8,7 @@ import { handleApiRequest } from '../api/index.js';
 import { getDatabaseWithValidation } from '../db/index.js';
 import { verifyPassword } from '../utils/common.js';
 import { handleEmailReceive } from '../email/receiver.js';
+import { resolveMailDomainConfigs } from '../integrations/cloudflare-email-routing.js';
 
 /**
  * 创建并配置路由器
@@ -228,17 +229,14 @@ async function delegateApiRequest(context) {
     return new Response('数据库连接失败', { status: 500 });
   }
 
-  const MAIL_DOMAINS = (env.MAIL_DOMAIN || 'temp.example.com')
-    .split(/[,\s]+/)
-    .map(d => d.trim())
-    .filter(Boolean);
+  const MAIL_DOMAIN_CONFIGS = resolveMailDomainConfigs(env);
 
   const RESEND_API_KEY = env.RESEND_API_KEY || env.RESEND_TOKEN || env.RESEND || '';
   const ADMIN_NAME = String(env.ADMIN_NAME || 'admin').trim().toLowerCase();
 
   // 访客只允许读取模拟数据
   if ((authPayload.role || 'admin') === 'guest') {
-    return handleApiRequest(request, DB, MAIL_DOMAINS, {
+    return handleApiRequest(request, DB, MAIL_DOMAIN_CONFIGS, {
       mockOnly: true,
       resendApiKey: RESEND_API_KEY,
       adminName: ADMIN_NAME,
@@ -250,7 +248,7 @@ async function delegateApiRequest(context) {
 
   // 邮箱用户只能访问自己的邮箱数据
   if (authPayload.role === 'mailbox') {
-    return handleApiRequest(request, DB, MAIL_DOMAINS, {
+    return handleApiRequest(request, DB, MAIL_DOMAIN_CONFIGS, {
       mockOnly: false,
       resendApiKey: RESEND_API_KEY,
       adminName: ADMIN_NAME,
@@ -261,7 +259,7 @@ async function delegateApiRequest(context) {
     });
   }
 
-  return handleApiRequest(request, DB, MAIL_DOMAINS, {
+  return handleApiRequest(request, DB, MAIL_DOMAIN_CONFIGS, {
     mockOnly: false,
     resendApiKey: RESEND_API_KEY,
     adminName: ADMIN_NAME,

@@ -17,7 +17,8 @@ import {
 import { handleMailboxAdminApi } from './mailboxAdmin.js';
 import {
   ensureWorkerRouteForMailbox,
-  deleteWorkerRouteForMailbox
+  deleteWorkerRouteForMailbox,
+  resolveMailDomainConfigs
 } from '../integrations/cloudflare-email-routing.js';
 
 /**
@@ -32,11 +33,12 @@ import {
  */
 export async function handleMailboxesApi(request, db, mailDomains, url, path, options) {
   const isMock = !!options.mockOnly;
+  const domainConfigs = resolveDomainConfigs(mailDomains, options?.env);
 
   // 返回域名列表给前端
   if (path === '/api/domains' && request.method === 'GET') {
     if (isMock) return Response.json(MOCK_DOMAINS);
-    const domains = Array.isArray(mailDomains) ? mailDomains : [(mailDomains || 'temp.example.com')];
+    const domains = domainConfigs.map(item => item.domain);
     return Response.json(domains);
   }
 
@@ -44,9 +46,10 @@ export async function handleMailboxesApi(request, db, mailDomains, url, path, op
   if (path === '/api/generate') {
     const lengthParam = Number(url.searchParams.get('length') || 0);
     const randomId = generateRandomId(lengthParam || undefined);
-    const domains = isMock ? MOCK_DOMAINS : (Array.isArray(mailDomains) ? mailDomains : [(mailDomains || 'temp.example.com')]);
+    const domains = isMock ? MOCK_DOMAINS : domainConfigs.map(item => item.domain);
     const domainIdx = Math.max(0, Math.min(domains.length - 1, Number(url.searchParams.get('domainIndex') || 0)));
     const chosenDomain = domains[domainIdx] || domains[0];
+    const chosenDomainConfig = isMock ? null : (domainConfigs[domainIdx] || domainConfigs[0] || null);
     const email = `${randomId}@${chosenDomain}`;
     
     if (!isMock) {
@@ -56,6 +59,7 @@ export async function handleMailboxesApi(request, db, mailDomains, url, path, op
           db,
           email,
           env: options?.env,
+          domainConfig: chosenDomainConfig,
           userId: payload?.userId || 0,
         });
         return Response.json({ email, expires: Date.now() + 3600000, routing: result.routing });
@@ -87,9 +91,10 @@ export async function handleMailboxesApi(request, db, mailDomains, url, path, op
       const local = String(body.local || '').trim().toLowerCase();
       const valid = /^[a-z0-9._-]{1,64}$/i.test(local);
       if (!valid) return errorResponse('非法用户名', 400);
-      const domains = Array.isArray(mailDomains) ? mailDomains : [(mailDomains || 'temp.example.com')];
+      const domains = domainConfigs.map(item => item.domain);
       const domainIdx = Math.max(0, Math.min(domains.length - 1, Number(body.domainIndex || 0)));
       const chosenDomain = domains[domainIdx] || domains[0];
+      const chosenDomainConfig = domainConfigs[domainIdx] || domainConfigs[0] || null;
       const email = `${local}@${chosenDomain}`;
       
       try {
@@ -98,6 +103,7 @@ export async function handleMailboxesApi(request, db, mailDomains, url, path, op
           db,
           email,
           env: options?.env,
+          domainConfig: chosenDomainConfig,
           userId: payload?.userId || 0,
         });
         return Response.json({ email, expires: Date.now() + 3600000, routing: result.routing });
@@ -441,8 +447,8 @@ export async function handleMailboxesApi(request, db, mailDomains, url, path, op
   return null;
 }
 
-async function createMailboxWithOptionalRoute({ db, email, env, userId = 0 }) {
-  const routing = await ensureWorkerRouteForMailbox(email, env);
+async function createMailboxWithOptionalRoute({ db, email, env, domainConfig = null, userId = 0 }) {
+  const routing = await ensureWorkerRouteForMailbox(email, env, domainConfig);
 
   try {
     if (userId) {
@@ -459,7 +465,7 @@ async function createMailboxWithOptionalRoute({ db, email, env, userId = 0 }) {
   } catch (error) {
     if (routing?.created) {
       try {
-        await deleteWorkerRouteForMailbox(email, env, routing.ruleId || '');
+        await deleteWorkerRouteForMailbox(email, env, routing.ruleId || '', domainConfig);
       } catch (_) {
         // 回滚 Cloudflare 规则失败时保留原始业务错误。
       }
@@ -467,3 +473,27 @@ async function createMailboxWithOptionalRoute({ db, email, env, userId = 0 }) {
     throw error;
   }
 }
+
+function resolveDomainConfigs(mailDomains, env = {}) {
+  if (Array.isArray(mailDomains) && mailDomains.length > 0 && typeof mailDomains[0] === 'object') {
+    return mailDomains
+      .map(item => ({
+        domain: String(item?.domain || '').trim().toLowerCase(),
+        routing: item?.routing || null,
+      }))
+      .filter(item => item.domain);
+  }
+
+  if (Array.isArray(mailDomains) && mailDomains.length > 0) {
+    return mailDomains
+      .map(domain => ({ domain: String(domain || '').trim().toLowerCase(), routing: null }))
+      .filter(item => item.domain);
+  }
+
+  if (typeof mailDomains === 'string' && mailDomains.trim()) {
+    return [{ domain: mailDomains.trim().toLowerCase(), routing: null }];
+  }
+
+  return resolveMailDomainConfigs(env);
+}
+

@@ -5,6 +5,24 @@
 
 const API_BASE = "https://api.cloudflare.com/client/v4";
 
+const DEFAULT_MAIL_DOMAIN = "temp.example.com";
+
+export function resolveMailDomainConfigs(env = {}) {
+	const rawMap = String(
+		env.MAIL_DOMAIN_ZONE_MAP || env.CLOUDFLARE_ZONE_MAP || "",
+	).trim();
+	const domainMap = parseDomainZoneMap(rawMap);
+
+	let domains = parseDomainList(env.MAIL_DOMAIN);
+	if (!domains.length) domains = Object.keys(domainMap);
+	if (!domains.length) domains = [DEFAULT_MAIL_DOMAIN];
+
+	return domains.map((domain) => ({
+		domain,
+		routing: domainMap[domain] || null,
+	}));
+}
+
 export function getCloudflareEmailRoutingConfig(env = {}) {
 	const apiToken = String(
 		env.CLOUDFLARE_EMAIL_ROUTING_API_TOKEN ||
@@ -55,19 +73,58 @@ export function getCloudflareEmailRoutingConfig(env = {}) {
 	};
 }
 
-export async function ensureWorkerRouteForMailbox(email, env = {}) {
-	const config = getCloudflareEmailRoutingConfig(env);
+export function getCloudflareEmailRoutingConfigForDomain(
+	domain,
+	env = {},
+	domainConfig = null,
+) {
+	const normalizedDomain = normalizeDomain(domain);
+	const resolvedDomainConfig =
+		domainConfig || findDomainConfig(normalizedDomain, env);
+	if (!resolvedDomainConfig?.routing) {
+		return getCloudflareEmailRoutingConfig(env);
+	}
+
+	const override = resolvedDomainConfig.routing;
+	const mergedEnv = {
+		...env,
+		CLOUDFLARE_ZONE_ID: override.zoneId || env.CLOUDFLARE_ZONE_ID,
+		CLOUDFLARE_EMAIL_ROUTING_WORKER:
+			override.workerName || env.CLOUDFLARE_EMAIL_ROUTING_WORKER,
+		CLOUDFLARE_EMAIL_ROUTING_API_TOKEN:
+			override.apiToken || env.CLOUDFLARE_EMAIL_ROUTING_API_TOKEN,
+		CLOUDFLARE_API_TOKEN: override.apiToken || env.CLOUDFLARE_API_TOKEN,
+		CLOUDFLARE_API_EMAIL: override.apiEmail || env.CLOUDFLARE_API_EMAIL,
+		CLOUDFLARE_GLOBAL_API_KEY:
+			override.globalApiKey || env.CLOUDFLARE_GLOBAL_API_KEY,
+		CLOUDFLARE_ACCOUNT_ID: override.accountId || env.CLOUDFLARE_ACCOUNT_ID,
+	};
+
+	return getCloudflareEmailRoutingConfig(mergedEnv);
+}
+
+export async function ensureWorkerRouteForMailbox(
+	email,
+	env = {},
+	domainConfig = null,
+) {
+	const normalized = normalizeEmail(email);
+	if (!normalized) throw new Error("无效的邮箱地址");
+
+	const domain = extractDomainFromEmail(normalized);
+	const config = getCloudflareEmailRoutingConfigForDomain(
+		domain,
+		env,
+		domainConfig,
+	);
 	if (!config.configured) {
 		return {
 			enabled: false,
 			status: "disabled",
 			ruleId: "",
-			message: `Cloudflare 自动路由未启用，缺少配置：${config.missing.join(", ")}`,
+			message: `Cloudflare 自动路由未启用（域名 ${domain || "unknown"}），缺少配置：${config.missing.join(", ")}`,
 		};
 	}
-
-	const normalized = normalizeEmail(email);
-	if (!normalized) throw new Error("无效的邮箱地址");
 
 	const existingRule = await findRuleByAddress(config, normalized);
 	if (existingRule) {
@@ -116,8 +173,17 @@ export async function deleteWorkerRouteForMailbox(
 	email,
 	env = {},
 	knownRuleId = "",
+	domainConfig = null,
 ) {
-	const config = getCloudflareEmailRoutingConfig(env);
+	const normalized = normalizeEmail(email);
+	if (!normalized) return { enabled: true, status: "invalid", deleted: false };
+
+	const domain = extractDomainFromEmail(normalized);
+	const config = getCloudflareEmailRoutingConfigForDomain(
+		domain,
+		env,
+		domainConfig,
+	);
 	if (!config.configured) {
 		return {
 			enabled: false,
@@ -126,9 +192,6 @@ export async function deleteWorkerRouteForMailbox(
 			message: "Cloudflare 自动路由未启用",
 		};
 	}
-
-	const normalized = normalizeEmail(email);
-	if (!normalized) return { enabled: true, status: "invalid", deleted: false };
 
 	let rule = null;
 	if (knownRuleId) {
@@ -428,4 +491,119 @@ function normalizeEmail(email) {
 	return String(email || "")
 		.trim()
 		.toLowerCase();
+}
+
+function parseDomainList(rawDomains) {
+	const input = String(rawDomains || "").trim();
+	if (!input) return [];
+	return Array.from(
+		new Set(
+			input
+				.split(/[\s,]+/)
+				.map((domain) => normalizeDomain(domain))
+				.filter(Boolean),
+		),
+	);
+}
+
+function parseDomainZoneMap(rawMap) {
+	if (!rawMap) return {};
+	let parsed = null;
+	try {
+		parsed = JSON.parse(rawMap);
+	} catch (_) {
+		return {};
+	}
+
+	if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+		return {};
+	}
+
+	const output = {};
+	for (const [rawDomain, rawEntry] of Object.entries(parsed)) {
+		const domain = normalizeDomain(rawDomain);
+		if (!domain) continue;
+		const routing = normalizeDomainRoutingEntry(rawEntry);
+		if (!routing?.zoneId) continue;
+		output[domain] = routing;
+	}
+
+	return output;
+}
+
+function normalizeDomainRoutingEntry(rawEntry) {
+	if (!rawEntry) return null;
+	if (typeof rawEntry === "string") {
+		const zoneId = String(rawEntry).trim();
+		return zoneId ? { zoneId } : null;
+	}
+	if (typeof rawEntry !== "object" || Array.isArray(rawEntry)) {
+		return null;
+	}
+
+	const zoneId = pickString(rawEntry, [
+		"zoneId",
+		"zone_id",
+		"CLOUDFLARE_ZONE_ID",
+	]);
+	if (!zoneId) return null;
+
+	return {
+		zoneId,
+		apiToken: pickString(rawEntry, [
+			"apiToken",
+			"api_token",
+			"CLOUDFLARE_API_TOKEN",
+		]),
+		apiEmail: pickString(rawEntry, [
+			"apiEmail",
+			"api_email",
+			"CLOUDFLARE_API_EMAIL",
+		]),
+		globalApiKey: pickString(rawEntry, [
+			"globalApiKey",
+			"global_api_key",
+			"CLOUDFLARE_GLOBAL_API_KEY",
+		]),
+		workerName: pickString(rawEntry, [
+			"workerName",
+			"worker_name",
+			"CLOUDFLARE_EMAIL_ROUTING_WORKER",
+		]),
+		accountId: pickString(rawEntry, [
+			"accountId",
+			"account_id",
+			"CLOUDFLARE_ACCOUNT_ID",
+		]),
+	};
+}
+
+function findDomainConfig(domain, env = {}) {
+	if (!domain) return null;
+	const normalizedDomain = normalizeDomain(domain);
+	if (!normalizedDomain) return null;
+
+	const configs = resolveMailDomainConfigs(env);
+	return configs.find((item) => item.domain === normalizedDomain) || null;
+}
+
+function extractDomainFromEmail(email) {
+	const normalized = normalizeEmail(email);
+	const at = normalized.lastIndexOf("@");
+	if (at <= 0 || at >= normalized.length - 1) return "";
+	return normalizeDomain(normalized.slice(at + 1));
+}
+
+function normalizeDomain(domain) {
+	return String(domain || "")
+		.trim()
+		.toLowerCase();
+}
+
+function pickString(source, keys = []) {
+	for (const key of keys) {
+		const value = String(source?.[key] || "").trim();
+		if (value) return value;
+	}
+	return "";
 }

@@ -15,7 +15,8 @@ import {
 } from './mailboxSettings.js';
 import {
   deleteWorkerRouteForMailbox,
-  ensureWorkerRouteForMailbox
+  ensureWorkerRouteForMailbox,
+  resolveMailDomainConfigs
 } from '../integrations/cloudflare-email-routing.js';
 import { setMailboxRoutingRuleId } from '../db/index.js';
 
@@ -30,6 +31,7 @@ import { setMailboxRoutingRuleId } from '../db/index.js';
  */
 export async function handleMailboxAdminApi(request, db, url, path, options) {
   const isMock = !!options.mockOnly;
+  const domainConfigs = resolveMailDomainConfigs(options?.env || {});
 
   if (path === '/api/admin/backfill-routing' && request.method === 'POST') {
     if (isMock) return errorResponse('演示模式不可操作', 403);
@@ -79,7 +81,11 @@ export async function handleMailboxAdminApi(request, db, url, path, options) {
         if (!address) continue;
 
         try {
-          const routing = await ensureWorkerRouteForMailbox(address, options?.env || {});
+          const routing = await ensureWorkerRouteForMailbox(
+            address,
+            options?.env || {},
+            findDomainConfigForAddress(address, domainConfigs)
+          );
           if (routing?.ruleId) {
             await setMailboxRoutingRuleId(db, address, routing.ruleId);
           }
@@ -138,7 +144,8 @@ export async function handleMailboxAdminApi(request, db, url, path, options) {
       const routeCleanup = await deleteWorkerRouteForMailbox(
         normalized,
         options?.env || {},
-        mailbox?.routing_rule_id || ''
+        mailbox?.routing_rule_id || '',
+        findDomainConfigForAddress(normalized, domainConfigs)
       );
       if (routeCleanup?.enabled && routeCleanup?.status === 'foreign_rule') {
         return errorResponse('该邮箱在 Cloudflare 中存在非当前 Worker 的规则，请先手动删除该规则', 409);
@@ -451,3 +458,12 @@ export async function handleMailboxAdminApi(request, db, url, path, options) {
 
   return null;
 }
+
+function findDomainConfigForAddress(address, domainConfigs) {
+  const normalized = String(address || '').trim().toLowerCase();
+  const at = normalized.lastIndexOf('@');
+  if (at <= 0 || at >= normalized.length - 1) return null;
+  const domain = normalized.slice(at + 1);
+  return domainConfigs.find(item => item?.domain === domain) || null;
+}
+

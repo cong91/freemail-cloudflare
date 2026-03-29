@@ -17,6 +17,7 @@ import { extractEmail } from './utils/common.js';
 import { forwardByLocalPart, forwardByMailboxConfig } from './email/forwarder.js';
 import { parseEmailBody, extractVerificationCode } from './email/parser.js';
 import { getForwardTarget } from './db/mailboxes.js';
+import { resolveMailDomainConfigs } from './integrations/cloudflare-email-routing.js';
 
 export default {
   /**
@@ -37,10 +38,7 @@ export default {
     }
 
     // 解析邮件域名
-    const MAIL_DOMAINS = (env.MAIL_DOMAIN || 'temp.example.com')
-      .split(/[,\s]+/)
-      .map(d => d.trim())
-      .filter(Boolean);
+    const MAIL_DOMAINS = resolveMailDomainConfigs(env).map(item => item.domain);
 
     // 创建路由器并添加认证中间件
     const router = createRouter();
