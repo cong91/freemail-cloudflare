@@ -1,59 +1,59 @@
-# Cloudflare 部署与收件流程
+# Quy trình nhận và triển khai Cloudflare
 
-这份文档只讲一件事：把当前项目部署到 Cloudflare，并让邮箱真正能收信。
+Tài liệu này chỉ nói về một điều: triển khai dự án hiện tại lên Cloudflare và làm cho hộp thư thực sự nhận được thư.
 
-适用场景：
+Các tình huống áp dụng:
 
-- 根域名部署，使用 `Catch-all -> Worker`
-- 子域名部署，使用“生成邮箱时自动创建 Email Routing 规则”
-- 需要补齐历史邮箱的 Cloudflare 路由规则
+- Triển khai tên miền gốc, sử dụng `Catch-all -> Worker`
+- Triển khai tên miền phụ, sử dụng "Tự động tạo quy tắc Định tuyến Email khi tạo hộp thư"
+- Cần phải hoàn thành quy tắc định tuyến Cloudflare cho các hộp thư lịch sử
 
-## 1. 项目结构和收件链路
+##1. Cấu trúc dự án và nhận link
 
-项目的核心链路如下：
+Các liên kết cốt lõi của dự án như sau:
 
-1. 用户在前端创建一个邮箱地址
-2. 后端把邮箱写入 D1 的 `mailboxes` 表
-3. 如果启用了 Cloudflare Email Routing 自动建规则，会同时为这个地址创建 `Send to a worker -> freemail` 规则
-4. 外部邮件发送到这个地址
-5. Cloudflare Email Routing 把邮件投递给 Worker 的 email handler
-6. Worker 解析邮件并把正文、索引写入 D1，把完整 EML 存到 R2
-7. 前端通过 API 读取 D1 中的邮件列表和详情
+1. Người dùng tạo địa chỉ email ở giao diện người dùng
+2. Phần phụ trợ ghi hộp thư vào bảng `mailboxes` của D1
+3. Nếu Định tuyến email Cloudflare tự động tạo quy tắc, quy tắc `Send to a worker -> freemail` sẽ được tạo cho địa chỉ này cùng một lúc.
+4. Email bên ngoài được gửi đến địa chỉ này
+5. Định tuyến email trên Cloudflare gửi email đến trình xử lý email của Worker
+6. Nhân viên phân tích cú pháp email và viết nội dung và chỉ mục vào D1, đồng thời lưu EML hoàn chỉnh vào R2
+7. Giao diện người dùng đọc danh sách gửi thư và thông tin chi tiết trong D1 thông qua API
 
-和这条链路对应的资源：
+Các tài nguyên tương ứng với liên kết này:
 
-- Worker：页面、API、收件处理
-- D1：邮箱、邮件、用户、路由规则 ID
-- R2：完整 EML 原文
-- Email Routing：把外部邮件转进 Worker
+- Worker: trang, API, xử lý biên nhận
+- D1: Hộp thư, email, người dùng, ID quy tắc định tuyến
+- R2: Hoàn thành văn bản gốc EML
+- Email Routing: chuyển email bên ngoài tới Worker
 
-## 2. 部署前准备
+## 2. Chuẩn bị trước khi triển khai
 
-需要先准备：
+Cần chuẩn bị trước:
 
-- 一个已经接入 Cloudflare 的域名
+- Tên miền đã được kết nối với Cloudflare
 - Node.js 18+
-- Cloudflare 登录态
-- `wrangler` 可用
+- Trạng thái đăng nhập Cloudflare
+- `wrangler` có sẵn
 
-先登录 Cloudflare：
+Đăng nhập vào Cloudflare trước:
 
 ```bash
 npx wrangler login
 ```
 
-## 3. 一键部署
+## 3. Triển khai bằng một cú nhấp chuột
 
-项目已经内置了部署脚本 [deploy-cloudflare.mjs](/C:/Users/Administrator/Documents/Playground/freemail/scripts/deploy-cloudflare.mjs)，会自动完成下面这些步骤：
+Dự án có tập lệnh triển khai tích hợp [deploy-cloudflare.mjs](/C:/Users/Administrator/Documents/Playground/freemail/scripts/deploy-cloudflare.mjs), tập lệnh này sẽ tự động hoàn thành các bước sau:
 
-- 创建或复用 D1
-- 创建或复用 R2
-- 把资源 ID 写回 [wrangler.toml](/C:/Users/Administrator/Documents/Playground/freemail/wrangler.toml)
-- 初始化 D1 表结构
-- 写入 secrets
-- 执行 `wrangler deploy`
+- Tạo hoặc tái sử dụng D1
+- Tạo hoặc tái sử dụng R2
+- Viết ID tài nguyên trở lại [wrangler.toml](/C:/Users/Administrator/Documents/Playground/freemail/wrangler.toml)
+- Khởi tạo cấu trúc bảng D1
+- viết bí mật
+- Thực hiện `wrangler deploy`
 
-最小部署命令：
+Lệnh triển khai tối thiểu:
 
 ```bash
 node scripts/deploy-cloudflare.mjs ^
@@ -62,7 +62,7 @@ node scripts/deploy-cloudflare.mjs ^
   --admin-password "StrongPass!123"
 ```
 
-如果你已经有现成的 D1/R2：
+Nếu bạn đã có sẵn D1/R2:
 
 ```bash
 node scripts/deploy-cloudflare.mjs ^
@@ -73,87 +73,87 @@ node scripts/deploy-cloudflare.mjs ^
   --bucket-name "<your-r2-bucket>"
 ```
 
-## 4. 两种收件模式
+## 4. Hai chế độ nhận
 
-### 模式 A：根域名 Catch-all
+### Chế độ A: Tên miền gốc Catch-all
 
-这是 Cloudflare 最省事、也最接近“真正临时邮箱”的模式。
+Đây là chế độ đơn giản nhất và gần giống nhất với chế độ "hộp thư tạm thời thực sự" của Cloudflare.
 
-适用：
+Áp dụng:
 
-- 你控制的是根域名
-- 例如 `example.com`
+- Bạn kiểm soát tên miền gốc
+- Ví dụ `example.com`
 
-流程：
+quá trình:
 
-1. 部署 Worker
-2. 打开 `Email > Email Routing`
-3. 启用 Email Routing
-4. 把 `Catch-all` 设置为 `Send to a worker`
-5. 选择 Worker：`freemail`
+1. Triển khai công nhân
+2. Mở `Email > Email Routing`
+3. Kích hoạt định tuyến email
+4. Đặt `Catch-all` thành `Send to a worker`
+5. Chọn Công nhân: `freemail`
 
-效果：
+Tác dụng:
 
-- 任意前缀 `anything@example.com` 都能直接收进 Worker
+- Mọi tiền tố `anything@example.com` đều có thể được đưa trực tiếp vào Worker
 
-### 模式 B：子域名自动建规则
+###Chế độ B: Tự động tạo quy tắc cho tên miền phụ
 
-适用：
+Áp dụng:
 
-- 你使用的是子域名
-- 例如 `mail.example.com`、`zaojun.de5.net`
+- Bạn đang sử dụng tên miền phụ
+- Ví dụ `mail.example.com`, `zaojun.de5.net`
 
-Cloudflare 的限制是：
+Hạn chế của Cloudflare là:
 
-- `Catch-all` 只支持 zone 级域名
-- 不支持对子域名单独开 Catch-all
+- `Catch-all` chỉ hỗ trợ tên miền cấp vùng
+- Không hỗ trợ mở Catch-all riêng cho tên miền phụ
 
-所以子域名模式下，本项目采取的是：
+Do đó, trong chế độ tên miền phụ, dự án này áp dụng các phương pháp sau:
 
-1. 用户先在前端生成邮箱
-2. 后端调用 Cloudflare Email Routing API
-3. 自动为这个具体地址创建一条 `literal(to) -> worker` 规则
+1. Trước tiên, người dùng tạo địa chỉ email ở giao diện người dùng
+2. Cuộc gọi phụ trợ API định tuyến email của Cloudflare
+3. Tự động tạo quy tắc `literal(to) -> worker` cho địa chỉ cụ thể này
 
-效果：
+Tác dụng:
 
-- 新生成的子域名邮箱可以直接收信
-- 不是“任意随机前缀天然全收”
-- 历史邮箱需要单独回填规则
+- Hộp thư tên miền phụ mới được tạo có thể nhận email trực tiếp
+- Không phải "bất kỳ tiền tố ngẫu nhiên nào được thu thập một cách tự nhiên"
+- Hộp thư lịch sử yêu cầu các quy tắc chèn lấp riêng biệt
 
-## 5. 子域名自动建规则所需配置
+## 5. Cấu hình cần thiết để tự động tạo quy tắc cho tên miền phụ
 
-如果你要用模式 B，需要额外配置下面这些变量。
+Nếu bạn muốn sử dụng chế độ B, bạn cần cấu hình thêm các biến sau.
 
-### 方案 1：API Token
+### Cách 1: API Token
 
 ```bash
-CLOUDFLARE_ZONE_ID="你的 Zone ID"
-CLOUDFLARE_API_TOKEN="你的 Cloudflare API Token"
+CLOUDFLARE_ZONE_ID="Zone ID của bạn"
+CLOUDFLARE_API_TOKEN="Cloudflare API Token của bạn"
 CLOUDFLARE_EMAIL_ROUTING_WORKER="freemail"
 ```
 
-说明：
+minh họa:
 
-- `CLOUDFLARE_ZONE_ID`：域名对应 zone 的 Zone ID
-- `CLOUDFLARE_API_TOKEN`：能访问 Email Routing Rules API 的 token
-- `CLOUDFLARE_EMAIL_ROUTING_WORKER`：收件目标 Worker 名称，通常就是 `freemail`
+- `CLOUDFLARE_ZONE_ID`: ID vùng của vùng tương ứng với tên miền
+- `CLOUDFLARE_API_TOKEN`: mã thông báo có thể truy cập API Quy tắc định tuyến email
+- `CLOUDFLARE_EMAIL_ROUTING_WORKER`: Tên Worker nhận, thường là `freemail`
 
-### 方案 2：Global API Key 兼容模式
+### Giải pháp 2: Chế độ tương thích Global API Key
 
-如果你的账号里不好找对的 token 权限，可以直接改用：
+Nếu khó tìm được quyền truy cập mã thông báo phù hợp trong tài khoản của mình, bạn có thể trực tiếp sử dụng:
 
 ```bash
-CLOUDFLARE_ZONE_ID="你的 Zone ID"
-CLOUDFLARE_API_EMAIL="你的 Cloudflare 登录邮箱"
-CLOUDFLARE_GLOBAL_API_KEY="你的 Global API Key"
+CLOUDFLARE_ZONE_ID="Zone ID của bạn"
+CLOUDFLARE_API_EMAIL="Email đăng nhập Cloudflare của bạn"
+CLOUDFLARE_GLOBAL_API_KEY="Global API Key của bạn"
 CLOUDFLARE_EMAIL_ROUTING_WORKER="freemail"
 ```
 
-这个方案已经在当前项目里验证通过。
+Giải pháp này đã được xác minh trong dự án hiện tại.
 
-### 部署脚本里直接传入
+### Truyền trực tiếp vào tập lệnh triển khai
 
-也可以在一键部署时一起传：
+Bạn cũng có thể tải nó lên cùng nhau trong quá trình triển khai bằng một cú nhấp chuột:
 
 ```bash
 node scripts/deploy-cloudflare.mjs ^
@@ -166,66 +166,66 @@ node scripts/deploy-cloudflare.mjs ^
   --cloudflare-email-routing-worker freemail
 ```
 
-## 6. 必要配置项
+## 6. Các mục cấu hình cần thiết
 
-### 基础运行配置
+###Cấu hình chạy cơ bản
 
-| 变量 | 说明 | 必填 |
+| Biến | Mô tả | Bắt buộc |
 | --- | --- | --- |
-| `MAIL_DOMAIN` | 邮箱域名，支持逗号分隔多个域名 | 是 |
-| `ADMIN_PASSWORD` | 管理员密码 | 是 |
-| `ADMIN_NAME` | 管理员用户名，默认 `admin` | 否 |
-| `JWT_TOKEN` | JWT 密钥；部署脚本会自动生成 | 是 |
-| `TEMP_MAIL_DB` | D1 绑定名 | 是 |
-| `MAIL_EML` | R2 绑定名 | 是 |
+| `MAIL_DOMAIN` | Tên miền email, hỗ trợ nhiều tên miền cách nhau bằng dấu phẩy | Có |
+| `ADMIN_PASSWORD` | Mật khẩu quản trị viên | Có |
+| `ADMIN_NAME` | Tên người dùng quản trị viên, mặc định `admin` | Không |
+| `JWT_TOKEN` | khóa JWT; tập lệnh triển khai tự động tạo | Có |
+| `TEMP_MAIL_DB` | Tên ràng buộc D1 | Có |
+| `MAIL_EML` | Tên ràng buộc R2 | Có |
 
-### 可选发送配置
+###Cấu hình gửi tùy chọn
 
-| 变量 | 说明 |
+| Biến | Mô tả |
 | --- | --- |
-| `RESEND_API_KEY` | Resend 发件密钥，支持单值、键值对、JSON 三种格式 |
-| `FORWARD_RULES` | 前缀转发规则 |
+| `RESEND_API_KEY` | Gửi lại khóa gửi, hỗ trợ giá trị đơn, cặp khóa-giá trị và định dạng JSON |
+| `FORWARD_RULES` | Quy tắc chuyển tiếp tiền tố |
 
-### 子域名自动收件配置
+### Cấu hình nhận tự động tên miền phụ
 
-| 变量 | 说明 |
+| Biến | Mô tả |
 | --- | --- |
-| `CLOUDFLARE_ZONE_ID` | 目标 zone 的 ID |
+| `CLOUDFLARE_ZONE_ID` | ID của vùng mục tiêu |
 | `CLOUDFLARE_API_TOKEN` | Cloudflare API Token |
-| `CLOUDFLARE_API_EMAIL` | Cloudflare 登录邮箱 |
+| `CLOUDFLARE_API_EMAIL` | Email đăng nhập Cloudflare |
 | `CLOUDFLARE_GLOBAL_API_KEY` | Cloudflare Global API Key |
-| `CLOUDFLARE_EMAIL_ROUTING_WORKER` | 自动创建规则时指向的 Worker |
+| `CLOUDFLARE_EMAIL_ROUTING_WORKER` | Công nhân được trỏ đến khi tự động tạo quy tắc |
 
-认证方式二选一即可：
+Bạn có thể chọn một trong hai phương thức xác thực:
 
 - `CLOUDFLARE_API_TOKEN`
 - `CLOUDFLARE_API_EMAIL + CLOUDFLARE_GLOBAL_API_KEY`
 
-## 7. 首次部署后的检查
+## 7. Kiểm tra sau lần triển khai đầu tiên
 
-建议按这个顺序检查：
+Nên kiểm tra theo thứ tự sau:
 
-1. 打开 Worker 网址，确认首页能访问
-2. 用管理员账号登录
-3. 生成一个全新邮箱
-4. 给这个新邮箱发送测试邮件
-5. 打开页面确认邮件已经入库
+1. Mở URL Công nhân và xác nhận rằng có thể truy cập trang chủ
+2. Đăng nhập bằng tài khoản quản trị viên
+3. Tạo hộp thư mới
+4. Gửi email kiểm tra tới hộp thư mới này
+5. Mở trang để xác nhận email đã được lưu trữ trong cơ sở dữ liệu
 
-如果是子域名模式，重点看第 3 步：
+Nếu đó là chế độ tên miền phụ, hãy tập trung vào bước 3:
 
-- 随机生成成功
-- 没有报 Cloudflare API 错误
-- 新邮箱能收到信
+- Tạo ngẫu nhiên thành công
+- Không có lỗi API Cloudflare nào được báo cáo
+- Bạn có thể nhận thư trong hộp thư mới của mình
 
-## 8. 历史邮箱规则回填
+## 8. Chèn lấp quy tắc hộp thư lịch sử
 
-如果你是在启用“子域名自动建规则”之前就已经创建过邮箱，这些老邮箱不会自动补路由。
+Nếu bạn đã tạo hộp thư trước khi bật "quy tắc tạo tự động tên miền phụ", những hộp thư cũ này sẽ không tự động bổ sung các tuyến đường.
 
-项目已经提供了管理员回填接口：
+Dự án đã cung cấp giao diện chèn lấp dành cho quản trị viên:
 
 `POST /api/admin/backfill-routing`
 
-调用方式：
+Phương thức gọi:
 
 ```bash
 curl -X POST "https://your-worker.workers.dev/api/admin/backfill-routing" \
@@ -234,13 +234,13 @@ curl -X POST "https://your-worker.workers.dev/api/admin/backfill-routing" \
   -d "{\"limit\":100}"
 ```
 
-说明：
+minh họa:
 
-- `Authorization` 里直接用 `JWT_TOKEN`
-- `limit` 表示本次最多处理多少个历史邮箱
-- 如果不传 `addresses`，就会自动处理所有 `routing_rule_id` 为空的邮箱
+- Sử dụng `JWT_TOKEN` trực tiếp trong `Authorization`
+- `limit` cho biết số lượng hộp thư lịch sử tối đa được xử lý lần này
+- Nếu `addresses` không được chuyển, tất cả các hộp thư có `routing_rule_id` trống sẽ được xử lý tự động.
 
-指定邮箱回填：
+Chèn lấp email được chỉ định:
 
 ```bash
 curl -X POST "https://your-worker.workers.dev/api/admin/backfill-routing" \
@@ -249,56 +249,56 @@ curl -X POST "https://your-worker.workers.dev/api/admin/backfill-routing" \
   -d "{\"addresses\":[\"old1@example.com\",\"old2@example.com\"]}"
 ```
 
-## 9. 常用运维命令
+##9. Các lệnh vận hành và bảo trì chung
 
-查看部署：
+Xem triển khai:
 
 ```bash
 npx wrangler deployments list --name freemail
 ```
 
-查看 secrets：
+Xem bí mật:
 
 ```bash
 npx wrangler secret list --name freemail
 ```
 
-查看 D1：
+Xem D1:
 
 ```bash
 npx wrangler d1 execute TEMP_MAIL_DB --remote --command "SELECT id, address, routing_rule_id FROM mailboxes ORDER BY id DESC LIMIT 20;"
 ```
 
-重新部署：
+Triển khai lại:
 
 ```bash
 npx wrangler deploy --keep-vars
 ```
 
-## 10. 常见问题
+##10. Câu hỏi thường gặp
 
-### 页面能打开，但收不到信
+### Trang mở được nhưng không nhận được thư
 
-先分场景看：
+Chúng ta hãy nhìn vào những cảnh đầu tiên:
 
-- 根域名模式：检查 `Catch-all -> Send to a worker -> freemail`
-- 子域名模式：检查创建邮箱时是否已经自动生成路由规则
+- Mẫu miền gốc: kiểm tra `Catch-all -> Send to a worker -> freemail`
+- Chế độ tên miền phụ: Kiểm tra xem quy tắc định tuyến có được tạo tự động khi tạo hộp thư hay không
 
-### 随机生成时报 Cloudflare API 错误
+### Số lần tạo ngẫu nhiên Lỗi Cloudflare API
 
-优先检查：
+Kiểm tra ưu tiên:
 
-- `CLOUDFLARE_ZONE_ID` 是否正确
-- 认证方式是否真的可用
-- `CLOUDFLARE_EMAIL_ROUTING_WORKER` 是否和 Worker 名称一致
+- `CLOUDFLARE_ZONE_ID` có đúng không?
+- Phương thức xác thực có thực sự sẵn có không?
+- `CLOUDFLARE_EMAIL_ROUTING_WORKER` có nhất quán với tên Công nhân không?
 
-### 老邮箱收不到，新邮箱能收
+### Tôi không thể nhận nó bằng địa chỉ email cũ nhưng tôi có thể nhận nó bằng địa chỉ email mới.
 
-这是正常现象，说明你刚启用了子域名自动建规则，但历史邮箱还没补规则。执行“历史邮箱规则回填”即可。
+Đây là một hiện tượng bình thường. Điều đó có nghĩa là bạn vừa kích hoạt tính năng tự động tạo quy tắc cho tên miền phụ nhưng quy tắc đó vẫn chưa được thêm vào hộp thư lịch sử. Chỉ cần thực hiện "Chèn lấp quy tắc hộp thư lịch sử".
 
-### 管理员密码忘了
+### Quên mật khẩu quản trị viên?
 
-重新设置 `ADMIN_PASSWORD` secret，然后重新部署：
+Đặt lại bí mật `ADMIN_PASSWORD` và triển khai lại:
 
 ```bash
 npx wrangler secret put ADMIN_PASSWORD --name freemail

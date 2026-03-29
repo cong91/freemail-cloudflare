@@ -3,7 +3,7 @@
  * @module modules/mailbox/email-list
  */
 
-import { escapeHtml, escapeAttr } from '../app/ui-helpers.js';
+import { escapeAttr, escapeHtml } from "../app/ui-helpers.js";
 
 /**
  * 格式化时间戳
@@ -11,23 +11,23 @@ import { escapeHtml, escapeAttr } from '../app/ui-helpers.js';
  * @returns {string}
  */
 export function formatTime(ts) {
-  if (!ts) return '';
-  try {
-    const iso = ts.includes('T') ? ts : ts.replace(' ', 'T');
-    const d = new Date(iso + 'Z');
-    return new Intl.DateTimeFormat('zh-CN', {
-      timeZone: 'Asia/Shanghai',
-      hour12: false,
-      year: 'numeric',
-      month: 'numeric',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
-    }).format(d);
-  } catch (_) {
-    return ts;
-  }
+	if (!ts) return "";
+	try {
+		const iso = ts.includes("T") ? ts : ts.replace(" ", "T");
+		const d = new Date(iso + "Z");
+		return new Intl.DateTimeFormat("zh-CN", {
+			timeZone: "Asia/Shanghai",
+			hour12: false,
+			year: "numeric",
+			month: "numeric",
+			day: "numeric",
+			hour: "2-digit",
+			minute: "2-digit",
+			second: "2-digit",
+		}).format(d);
+	} catch (_) {
+		return ts;
+	}
 }
 
 /**
@@ -37,10 +37,10 @@ export function formatTime(ts) {
  * @returns {string}
  */
 export function truncateText(text, maxLength = 100) {
-  if (!text) return '';
-  const s = String(text).trim();
-  if (s.length <= maxLength) return s;
-  return s.slice(0, maxLength) + '...';
+	if (!text) return "";
+	const s = String(text).trim();
+	if (s.length <= maxLength) return s;
+	return s.slice(0, maxLength) + "...";
 }
 
 /**
@@ -49,23 +49,25 @@ export function truncateText(text, maxLength = 100) {
  * @returns {string}
  */
 export function renderEmailItem(email) {
-  const id = email.id;
-  const sender = escapeHtml(email.sender || '未知发件人');
-  const subject = escapeHtml(email.subject || '(无主题)');
-  const preview = escapeHtml(truncateText(email.preview || email.content || '', 80));
-  const receivedAt = formatTime(email.received_at);
-  const isRead = email.is_read ? 'read' : 'unread';
-  const verificationCode = email.verification_code || '';
-  
-  return `
+	const id = email.id;
+	const sender = escapeHtml(email.sender || "Người gửi chưa rõ");
+	const subject = escapeHtml(email.subject || "(Không có chủ đề)");
+	const preview = escapeHtml(
+		truncateText(email.preview || email.content || "", 80),
+	);
+	const receivedAt = formatTime(email.received_at);
+	const isRead = email.is_read ? "read" : "unread";
+	const verificationCode = email.verification_code || "";
+
+	return `
     <div class="email-item ${isRead}" data-email-id="${id}">
       <div class="email-header">
-        <span class="email-sender" title="${escapeAttr(email.sender || '')}">${sender}</span>
+        <span class="email-sender" title="${escapeAttr(email.sender || "")}">${sender}</span>
         <span class="email-time">${receivedAt}</span>
       </div>
       <div class="email-subject">${subject}</div>
       <div class="email-preview">${preview}</div>
-      ${verificationCode ? `<div class="email-code" title="点击复制验证码">🔑 ${escapeHtml(verificationCode)}</div>` : ''}
+      ${verificationCode ? `<div class="email-code" title="Nhấn để sao chép mã xác thực">🔑 ${escapeHtml(verificationCode)}</div>` : ""}
     </div>
   `;
 }
@@ -76,14 +78,14 @@ export function renderEmailItem(email) {
  * @param {HTMLElement} container - 容器元素
  */
 export function renderEmailList(emails, container) {
-  if (!container) return;
-  
-  if (!emails || emails.length === 0) {
-    container.innerHTML = '';
-    return;
-  }
-  
-  container.innerHTML = emails.map(e => renderEmailItem(e)).join('');
+	if (!container) return;
+
+	if (!emails || emails.length === 0) {
+		container.innerHTML = "";
+		return;
+	}
+
+	container.innerHTML = emails.map((e) => renderEmailItem(e)).join("");
 }
 
 /**
@@ -91,7 +93,7 @@ export function renderEmailList(emails, container) {
  * @returns {string}
  */
 export function createSkeletonEmailItem() {
-  return `
+	return `
     <div class="email-item skeleton">
       <div class="email-header">
         <div class="skeleton-line sender-line"></div>
@@ -109,7 +111,10 @@ export function createSkeletonEmailItem() {
  * @returns {string}
  */
 export function generateSkeletonList(count = 5) {
-  return Array(count).fill(null).map(() => createSkeletonEmailItem()).join('');
+	return Array(count)
+		.fill(null)
+		.map(() => createSkeletonEmailItem())
+		.join("");
 }
 
 /**
@@ -119,15 +124,17 @@ export function generateSkeletonList(count = 5) {
  * @returns {Array}
  */
 export function filterEmails(emails, keyword) {
-  if (!keyword || !keyword.trim()) return emails;
-  
-  const term = keyword.toLowerCase().trim();
-  return emails.filter(e => {
-    const sender = (e.sender || '').toLowerCase();
-    const subject = (e.subject || '').toLowerCase();
-    const preview = (e.preview || e.content || '').toLowerCase();
-    return sender.includes(term) || subject.includes(term) || preview.includes(term);
-  });
+	if (!keyword || !keyword.trim()) return emails;
+
+	const term = keyword.toLowerCase().trim();
+	return emails.filter((e) => {
+		const sender = (e.sender || "").toLowerCase();
+		const subject = (e.subject || "").toLowerCase();
+		const preview = (e.preview || e.content || "").toLowerCase();
+		return (
+			sender.includes(term) || subject.includes(term) || preview.includes(term)
+		);
+	});
 }
 
 /**
@@ -137,36 +144,36 @@ export function filterEmails(emails, keyword) {
  * @param {string} order - 排序顺序
  * @returns {Array}
  */
-export function sortEmails(emails, sortBy = 'received_at', order = 'desc') {
-  const result = [...emails];
-  
-  result.sort((a, b) => {
-    let valueA, valueB;
-    
-    switch (sortBy) {
-      case 'sender':
-        valueA = (a.sender || '').toLowerCase();
-        valueB = (b.sender || '').toLowerCase();
-        break;
-      case 'subject':
-        valueA = (a.subject || '').toLowerCase();
-        valueB = (b.subject || '').toLowerCase();
-        break;
-      case 'received_at':
-      default:
-        valueA = new Date(a.received_at || 0);
-        valueB = new Date(b.received_at || 0);
-        break;
-    }
-    
-    if (order === 'asc') {
-      return valueA > valueB ? 1 : valueA < valueB ? -1 : 0;
-    } else {
-      return valueA < valueB ? 1 : valueA > valueB ? -1 : 0;
-    }
-  });
-  
-  return result;
+export function sortEmails(emails, sortBy = "received_at", order = "desc") {
+	const result = [...emails];
+
+	result.sort((a, b) => {
+		let valueA, valueB;
+
+		switch (sortBy) {
+			case "sender":
+				valueA = (a.sender || "").toLowerCase();
+				valueB = (b.sender || "").toLowerCase();
+				break;
+			case "subject":
+				valueA = (a.subject || "").toLowerCase();
+				valueB = (b.subject || "").toLowerCase();
+				break;
+			case "received_at":
+			default:
+				valueA = new Date(a.received_at || 0);
+				valueB = new Date(b.received_at || 0);
+				break;
+		}
+
+		if (order === "asc") {
+			return valueA > valueB ? 1 : valueA < valueB ? -1 : 0;
+		} else {
+			return valueA < valueB ? 1 : valueA > valueB ? -1 : 0;
+		}
+	});
+
+	return result;
 }
 
 /**
@@ -175,19 +182,19 @@ export function sortEmails(emails, sortBy = 'received_at', order = 'desc') {
  * @returns {number}
  */
 export function countUnread(emails) {
-  if (!emails) return 0;
-  return emails.filter(e => !e.is_read).length;
+	if (!emails) return 0;
+	return emails.filter((e) => !e.is_read).length;
 }
 
 // 导出默认对象
 export default {
-  formatTime,
-  truncateText,
-  renderEmailItem,
-  renderEmailList,
-  createSkeletonEmailItem,
-  generateSkeletonList,
-  filterEmails,
-  sortEmails,
-  countUnread
+	formatTime,
+	truncateText,
+	renderEmailItem,
+	renderEmailList,
+	createSkeletonEmailItem,
+	generateSkeletonList,
+	filterEmails,
+	sortEmails,
+	countUnread,
 };

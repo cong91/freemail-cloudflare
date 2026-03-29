@@ -1,30 +1,30 @@
-# D1 数据库行读取分析
+# Phân tích đọc hàng cơ sở dữ liệu D1
 
-## 为什么会有 400 万行读取？
+## Tại sao có 4 triệu hàng được đọc?
 
-即使用户不多，也可能产生大量行读取。以下是可能的原因：
+Ngay cả khi không có nhiều người dùng thì vẫn có thể xảy ra số lượng lớn lượt đọc hàng. Sau đây là những lý do có thể:
 
-### 1. **COUNT 查询扫描全表**
+### 1. **COUNT truy vấn quét toàn bộ bảng**
 
 ```sql
--- 这个查询会扫描整个 mailboxes 表
+-- Truy vấn này sẽ quét toàn bộ bảng mailboxes
 SELECT COUNT(1) AS count FROM mailboxes;
--- 如果有 10000 个邮箱，计费：10000 行读取
+-- Nếu có 10.000 hộp thư, tính phí: 10.000 dòng đọc
 ```
 
-**项目中的 COUNT 查询**：
-- `getTotalMailboxCount()` - 每次超级管理员查看配额时触发
-- `getCachedUserQuota()` - 用户配额查询中的 COUNT
-- `listUsersWithCounts()` - 子查询中的 COUNT(1)
+**COUNT truy vấn trong dự án**:
+- `getTotalMailboxCount()` - được kích hoạt mỗi khi quản trị viên cấp cao xem hạn mức
+- `getCachedUserQuota()` - COUNT trong truy vấn hạn ngạch người dùng
+- `listUsersWithCounts()` - COUNT(1) trong truy vấn phụ
 
-**解决方案**：已添加缓存，但仍需注意
+**Giải pháp**: Đã thêm bộ nhớ đệm nhưng vẫn cần chú ý
 
 ---
 
-### 2. **JOIN 查询的行数叠加**
+### 2. **THAM GIA xếp chồng số hàng truy vấn**
 
 ```sql
--- listUsersWithCounts 中的查询
+-- Truy vấn trong listUsersWithCounts
 SELECT u.*, COALESCE(cnt.c, 0) AS mailbox_count
 FROM users u
 LEFT JOIN (
@@ -34,116 +34,116 @@ LEFT JOIN (
 ) cnt ON cnt.user_id = u.id;
 ```
 
-**计费**：
-- 扫描 users 表：假设 100 个用户
-- 扫描 user_mailboxes 表：假设 5000 条记录
-- 总计：5100 行读取（每次查询用户列表）
+**Thanh toán**:
+- Quét bảng user: giả sử 100 user
+- Quét bảng user_mailboxes: giả sử 5000 bản ghi
+- Tổng cộng: 5100 hàng đã đọc (mỗi truy vấn cho danh sách người dùng)
 
 ---
 
-### 3. **频繁的初始化查询**
+### 3. **Truy vấn khởi tạo thường xuyên**
 
-每次 Worker 冷启动或重启时都会执行：
-- 多次 `PRAGMA table_info()` - 每次扫描表的列定义
-- `SELECT name FROM sqlite_master` - 扫描系统表
-- 表结构检查和迁移
+Được thực thi mỗi khi Worker khởi động nguội hoặc khởi động lại:
+- nhiều lần `PRAGMA table_info()` - quét định nghĩa cột của bảng mỗi lần
+- `SELECT name FROM sqlite_master` - Quét bảng hệ thống
+- Kiểm tra và di chuyển cấu trúc bảng
 
-**估算**：
-- 如果 Worker 每天重启 50 次
-- 每次初始化产生约 200 行读取
-- 每天：10,000 行读取
+**Ước lượng**:
+- Nếu Công nhân khởi động lại 50 lần một ngày
+- Mỗi lần khởi tạo tạo ra khoảng 200 dòng đọc
+- Hàng ngày: 10.000 hàng được đọc
 
 ---
 
-### 4. **没有 LIMIT 或 LIMIT 过大的查询**
+### 4. **Truy vấn không có LIMIT hoặc LIMIT quá lớn**
 
-优化前的查询：
+Truy vấn trước khi tối ưu hóa:
 ```sql
--- 每次查询 50 封邮件
+-- Mỗi lần truy vấn 50 email
 SELECT * FROM messages WHERE mailbox_id = ? ORDER BY received_at DESC LIMIT 50;
 ```
 
-如果有 100 个活跃用户，每天查看 10 次邮件：
-- 100 用户 × 10 次 × 50 行 = 50,000 行/天
+Nếu có 100 người dùng hoạt động kiểm tra email 10 lần mỗi ngày:
+- 100 người dùng × 10 lần × 50 hàng = 50.000 hàng/ngày
 
 ---
 
-### 5. **索引扫描也计入行读取**
+### 5. **Quét chỉ mục cũng được tính là lần đọc hàng**
 
-即使使用了索引，扫描的索引行也会计入：
+Ngay cả khi một chỉ mục được sử dụng, các hàng chỉ mục được quét vẫn được tính:
 
 ```sql
--- 即使有索引，仍会扫描匹配的所有行
+-- Ngay cả khi có chỉ mục, vẫn quét toàn bộ các dòng khớp
 SELECT * FROM messages WHERE mailbox_id = 123 ORDER BY received_at DESC;
--- 如果该邮箱有 1000 封邮件，计费：1000 行读取
+-- Nếu hộp thư có 1.000 email, tính phí: 1.000 dòng đọc
 ```
 
 ---
 
-### 6. **批量操作的累积效应**
+### 6. **Hiệu quả tích lũy của các hoạt động hàng loạt**
 
 ```sql
--- 批量切换邮箱登录权限（优化前）
--- 100 个邮箱 = 100 次查询 × 平均扫描行数
+-- Chuyển quyền đăng nhập hộp thư hàng loạt (trước tối ưu)
+-- 100 hộp thư = 100 lần truy vấn × số dòng quét trung bình
 ```
 
 ---
 
-## 实际案例估算
+## Ước tính trường hợp thực tế
 
-假设你的项目有以下数据量：
-- 邮箱数：10,000 个
-- 邮件数：100,000 封
-- 用户数：50 个
-- 每日活跃用户：10 人
+Giả sử dự án của bạn có khối lượng dữ liệu sau:
+- Số lượng hộp thư: 10.000
+- Số lượng email: 100.000
+- Số lượng người dùng: 50
+- Số người hoạt động hàng ngày: 10 người
 
-### 每日行读取估算：
+### Ước tính lượt đọc hàng ngày:
 
-| 操作 | 频率 | 单次读取 | 每日总计 |
+| Hoạt động | Tần số | Đọc đơn | Tổng số hàng ngày |
 |------|------|----------|----------|
-| Worker 初始化 | 50 次 | 200 行 | 10,000 |
-| 查看邮件列表 | 10 用户 × 20 次 | 20 行 | 4,000 |
-| 查看邮件详情 | 10 用户 × 50 次 | 1 行 | 500 |
-| 管理员查看用户列表 | 5 次 | 5,050 行 | 25,250 |
-| 超管查看配额（COUNT） | 10 次 | 10,000 行 | 100,000 |
-| 接收新邮件 | 200 封 | 5 行 | 1,000 |
-| 用户配额查询 | 100 次 | 100 行 | 10,000 |
-| **每日总计** | - | - | **~150,750 行** |
+| Khởi tạo công nhân | 50 lần | 200 hàng | 10.000 |
+| Xem danh sách gửi thư | 10 người dùng × 20 lần | 20 dòng | 4.000 |
+| Xem chi tiết email | 10 người dùng × 50 lần | 1 hàng | 500 |
+| Quản trị viên đã xem danh sách người dùng | 5 lần | 5.050 hàng | 25.250 |
+| Hạn ngạch tổng quan (COUNT) | 10 lần | 10.000 hàng | 100.000 |
+| Nhận tin nhắn mới | 200 tin nhắn | 5 dòng | 1.000 |
+| Truy vấn hạn ngạch người dùng | 100 lần | 100 hàng | 10.000 |
+| **Tổng số hàng ngày** | - | - | **~150.750 hàng** |
 
-**一个月**：150,750 × 30 = **4,522,500 行**（452 万行）
+**Một tháng**: 150.750 × 30 = **4.522.500 hàng** (4,52 triệu hàng)
 
 ---
 
-## 高行读取的主要原因
+## Lý do chính khiến việc đọc hàng cao
 
-### 🔴 1. 超管查看配额时的 COUNT 全表扫描
+### 🔴 1. COUNT quét toàn bộ bảng khi kiểm tra quá hạn ngạch
 ```javascript
-// getTotalMailboxCount() - 每次扫描所有邮箱
+// getTotalMailboxCount() - Mỗi lần quét toàn bộ hộp thư
 SELECT COUNT(1) AS count FROM mailboxes;
-// 10,000 个邮箱 = 10,000 行读取
+// 10.000 hộp thư = 10.000 dòng đọc
 ```
 
-### 🔴 2. 管理员频繁查看用户列表
+### 🔴 2. Quản trị viên thường xuyên kiểm tra danh sách người dùng
 ```javascript
-// listUsersWithCounts() - 包含 JOIN 和子查询
-// 每次查询扫描 users + user_mailboxes 的所有行
+// listUsersWithCounts() - Bao gồm JOIN và truy vấn con
+// Mỗi lần truy vấn quét toàn bộ dòng của users + user_mailboxes
 ```
 
-### 🔴 3. Worker 频繁冷启动
-- 每次冷启动都要检查表结构
-- PRAGMA 查询虽然已缓存，但 Worker 重启后缓存丢失
+### 🔴 3. Công nhân thường xuyên khởi động nguội
+- Kiểm tra cấu trúc bảng mỗi lần khởi động nguội
+- Mặc dù truy vấn PRAGMA đã được lưu vào bộ đệm nhưng bộ đệm sẽ bị mất sau khi Worker được khởi động lại.
 
-### 🔴 4. 没有合理的分页和缓存
-- 某些列表查询可能返回过多数据
-- 缓存失效后重复查询
+### 🔴 4. Không phân trang và lưu vào bộ nhớ đệm hợp lý
+- Một số truy vấn danh sách có thể trả về quá nhiều dữ liệu
+- Lặp lại truy vấn sau khi vô hiệu hóa bộ đệm
 
 ---
 
-## 进一步优化建议
+## Đề xuất tối ưu hóa hơn nữa
 
-### 1. **缓存 COUNT 结果**
+### 1. **Cache COUNT kết quả**
 ```javascript
-// 缓存邮箱总数，10分钟刷新一次
+// Lưu đệm tổng số hộp thư, làm mới mỗi 10 phút
 let cachedMailboxCount = null;
 let cachedMailboxCountTime = 0;
 
@@ -160,30 +160,30 @@ export async function getTotalMailboxCount(db) {
 }
 ```
 
-### 2. **优化用户列表查询**
+### 2. **Tối ưu hóa truy vấn danh sách người dùng**
 ```javascript
-// 只在需要时才计算邮箱数量，而不是每次都 JOIN
-// 或者使用缓存的统计数据
+// Chỉ tính số hộp thư khi cần, thay vì JOIN mỗi lần
+// Hoặc dùng dữ liệu thống kê đã lưu đệm
 ```
 
-### 3. **使用 Cloudflare Durable Objects 存储统计数据**
-- 将 COUNT 等统计数据存储在 DO 中
-- 异步更新，不影响主流程
-- 大幅减少 COUNT 查询
+### 3. **Sử dụng Đối tượng bền vững của Cloudflare để lưu trữ số liệu thống kê**
+- Lưu trữ số liệu thống kê như COUNT trong DO
+- Cập nhật không đồng bộ, không ảnh hưởng đến tiến trình chính
+- Giảm đáng kể COUNT truy vấn
 
-### 4. **添加请求去重**
-- 同一个请求在短时间内不重复执行
-- 使用 Request ID 或 Hash 作为缓存 Key
+### 4. **Thêm yêu cầu xóa trùng lặp**
+- Yêu cầu tương tự sẽ không được thực hiện nhiều lần trong một khoảng thời gian ngắn
+- Sử dụng ID yêu cầu hoặc Hash làm khóa bộ đệm
 
-### 5. **监控和日志**
+### 5. **Giám sát và ghi nhật ký**
 ```javascript
-// 添加查询监控
+// Thêm giám sát truy vấn
 const queryStats = {
   totalQueries: 0,
   estimatedRows: 0
 };
 
-// 记录每次查询
+// Ghi lại mỗi lần truy vấn
 function logQuery(query, estimatedRows) {
   queryStats.totalQueries++;
   queryStats.estimatedRows += estimatedRows;
@@ -192,27 +192,27 @@ function logQuery(query, estimatedRows) {
 
 ---
 
-## Cloudflare D1 免费配额
+## Hạn ngạch miễn phí của Cloudflare D1
 
-- **每日行读取**：500 万行
-- **每日行写入**：10 万行
-- **存储空间**：5 GB
+- **Số hàng được đọc hàng ngày**: 5 triệu hàng
+- **Bài viết hàng ngày**: 100.000 dòng
+- **Bộ nhớ**: 5 GB
 
-如果超出配额：
-- Worker 会返回错误
-- 需要升级到付费计划
+Nếu vượt quá hạn ngạch:
+- Worker sẽ trả về lỗi
+- Yêu cầu nâng cấp lên gói trả phí
 
 ---
 
-## 总结
+## Tóm tắt
 
-400 万行读取主要来自：
-1. ✅ **COUNT 查询**（已部分缓存）
-2. ✅ **JOIN 查询**（需进一步优化）
-3. ✅ **频繁的初始化**（已优化表结构缓存）
-4. ✅ **没有合理的 LIMIT**（已优化）
-5. ⚠️ **超管频繁查看配额**（需要添加更长的缓存）
-6. ⚠️ **Worker 频繁重启**（考虑使用持久化缓存）
+4 triệu hàng được đọc chủ yếu đến từ:
+1. ✅ **COUNT truy vấn** (được lưu vào bộ nhớ đệm một phần)
+2. ✅ **THAM GIA truy vấn** (cần tối ưu hóa thêm)
+3. ✅ **Khởi tạo thường xuyên** (bộ đệm cấu trúc bảng được tối ưu hóa)
+4. ✅ **Không GIỚI HẠN hợp lý** (tối ưu hóa)
+5. ⚠️ **Quản lý quá mức hạn ngạch xem thường xuyên** (cần thêm bộ đệm dài hơn)
+6. ⚠️ **Worker khởi động lại thường xuyên** (cân nhắc sử dụng bộ nhớ đệm liên tục)
 
-建议优先优化超管配额查询的缓存时间！
+Nên ưu tiên tối ưu hóa thời gian bộ đệm của các truy vấn vượt quá hạn mức quản lý!
 

@@ -1,70 +1,70 @@
 ### Loading
 ![Loading](../pic/v3/jiaoyan.png)
-### 首页
-![首页展示](../pic/shouye.png)
+### trang đầu
+![Hiển thị trang chủ](../pic/shouye.png)
 
-### 用户登陆
-![登录/密码保护](../pic/mimabaohu.png)
+### Người dùng đăng nhập
+![Đăng nhập/Bảo vệ bằng mật khẩu](../pic/mimabaohu.png)
 
-### 邮件内容查看（HTML 渲染）
-![邮件内容查看](../pic/youjianneironchakan.png)
+### Xem nội dung email (kết xuất HTML)
+![Xem nội dung email](../pic/youjianneironchakan.png)
 
-### 便捷复制验证码
-![便捷复制验证码](../pic/bianjiefuzhiyanzhengma.png)
+### Sao chép mã xác minh một cách thuận tiện
+![Mã xác minh sao chép tiện lợi](../pic/bianjiefuzhiyanzhengma.png)
 
-### 用户管理-首页
-![用户管理-首页](../pic/v3/yonghuguanli.png)
+### Quản lý người dùng-Trang chủ
+![Trang chủ quản lý người dùng](../pic/v3/yonghuguanli.png)
 
-### 分配邮箱
-![分配邮箱（单个）](../pic/v3/fenpeiyouxiang.png)
-![分配邮箱（多个）](../pic/v3/fenpeiyouxiangduoge.png)
+### Gán email
+![Gán hộp thư (đơn)](../pic/v3/fenpeiyouxiang.png)
+![Gán hộp thư (nhiều)](../pic/v3/fenpeiyouxiangduoge.png)
 
-### 编辑用户信息
-![编辑用户信息](../pic/v3/bianjiyonghuxinxi.png)
+### Chỉnh sửa thông tin người dùng
+![Chỉnh sửa thông tin người dùng](../pic/v3/bianjiyonghuxinxi.png)
 
-### 用户删除
-![删除用户确认](../pic/v3/shanchuyonghu.png)
-
-
-### 上限提示
-![邮箱上限提示](../pic/v3/youxiangshangxian.png)
+### Xóa người dùng
+![Xóa xác nhận của người dùng](../pic/v3/shanchuyonghu.png)
 
 
-### 发件测试（发送弹窗）
-![发件测试-发件弹窗](../pic/cesifajian.png)
+### Nhắc nhở giới hạn trên
+![Lời nhắc giới hạn email](../pic/v3/youxiangshangxian.png)
 
-### 发件测试（收件结果）
-![发件测试-收件结果](../pic/cesjieshoujiieguo.png)
 
-### 邮箱置顶-置顶效果
-![邮箱置顶-置顶效果](../pic/zhiding.png)
+### Gửi bài kiểm tra (gửi cửa sổ bật lên)
+![Đang gửi bài kiểm tra-Cửa sổ bật lên đang gửi](../pic/cesifajian.png)
 
-## 📱 手机端展示
+### Gửi bài kiểm tra (nhận kết quả)
+![Gửi kết quả nhận bài kiểm tra](../pic/cesjieshoujiieguo.png)
 
-### 手机端首页与登录
+### Hiệu ứng hàng đầu của email
+![Ghim vào đầu hiệu ứng trên cùng hộp thư của bạn](../pic/zhiding.png)
+
+## 📱 Màn hình di động
+
+### Trang chủ di động và đăng nhập
 <div style="display: flex; gap: 20px; justify-content: center; margin: 20px 0;">
-  <img src="../pic/phone/shouye.png" alt="手机端首页" style="height: 400px;" />
-  <img src="../pic/phone/shoujidengl.png" alt="手机端登录" style="height: 400px;" />
+<img src="../pic/phone/shouye.png" alt="Trang chủ di động" style="height: 400px;" />
+<img src="../pic/phone/shoujidengl.png" alt="Đăng nhập di động" style="height: 400px;" />
 </div>
 
-### 手机端生成与历史
+### Lịch sử và thế hệ thiết bị đầu cuối di động
 <div style="display: flex; gap: 20px; justify-content: center; margin: 20px 0;">
-  <img src="../pic/phone/shencheng.png" alt="手机端生成邮箱" style="height: 400px;" />
-  <img src="../pic/phone/lishi.png" alt="手机端历史邮箱" style="height: 400px;" />
+<img src="../pic/phone/shenchen.png" alt="Tạo email trên điện thoại di động" style="height: 400px;" />
+<img src="../pic/phone/lishi.png" alt="Hộp thư lịch sử di động" style="height: 400px;" />
 </div>
 
-### 手机端发件与自定义
+### Gửi và tùy chỉnh điện thoại di động
 <div style="display: flex; gap: 20px; justify-content: center; margin: 20px 0;">
-  <img src="../pic/phone/shoujianfajianxiang.png" alt="手机端发件箱" style="height: 400px;" />
-  <img src="../pic/phone/zidingyi.png" alt="手机端自定义设置" style="height: 400px;" />
+<img src="../pic/phone/shoujianfajianxiang.png" alt="Hộp thư đi di động" style="height: 400px;" />
+<img src="../pic/phone/zidingyi.png" alt="Cài đặt tùy chỉnh điện thoại di động" style="height: 400px;" />
 </div>
 
-### 手机端发送邮件与邮件详情
+### Gửi email và chi tiết email qua điện thoại di động
 <div style="display: flex; gap: 20px; justify-content: center; margin: 20px 0;">
-  <img src="../pic/phone/fasonyoujian.png" alt="手机端发送邮件" style="height: 400px;" />
-  <img src="../pic/phone/youjianxiangqing.png" alt="手机端邮件详情" style="height: 400px;" />
+<img src="../pic/phone/fasonyoujian.png" alt="Gửi email từ điện thoại di động" style="height: 400px;" />
+<img src="../pic/phone/youjianxiangqing.png" alt="Chi tiết email di động" style="height: 400px;" />
 </div>
 
-### 邮箱首页
-![邮箱首页](../pic/v4/youxiang.png)
+### Email Trang chủ
+![Trang chủ email](../pic/v4/youxiang.png)
 

@@ -1,103 +1,103 @@
-# 数据库初始化优化说明
+# Hướng dẫn tối ưu hóa khởi tạo cơ sở dữ liệu
 
-## 优化目标
-减少每次 Worker 启动时的数据库行读取，避免不必要的表结构检查和初始化操作。
+## Mục tiêu tối ưu hóa
+Giảm việc đọc hàng cơ sở dữ liệu mỗi khi Worker khởi động và tránh các hoạt động khởi tạo và kiểm tra cấu trúc bảng không cần thiết.
 
-## 主要改进
+## Những cải tiến lớn
 
-### 1. 轻量级初始化机制
-**优化前**：
-- 每次启动都执行完整的表结构检查
-- 使用 `PRAGMA table_info` 查询每个表的列信息
-- 执行多次 `ALTER TABLE` 尝试添加新列
-- 检查旧表迁移逻辑
+### 1. Cơ chế khởi tạo nhẹ
+**Trước khi tối ưu hóa**:
+- Thực hiện kiểm tra cấu trúc bảng hoàn chỉnh mỗi lần khởi động
+- Sử dụng `PRAGMA table_info` để truy vấn thông tin cột của mỗi bảng
+- Thực hiện `ALTER TABLE` nhiều lần để cố gắng thêm cột mới
+- Kiểm tra logic di chuyển bảng cũ
 
-**优化后**：
-- Worker 生命周期内只在首次启动时执行完整检查
-- 使用快速查询（`SELECT 1 FROM table LIMIT 1`）验证表是否存在
-- 如果表存在，直接跳过初始化
-- 移除所有运行时的表结构检查
+**Sau khi tối ưu hóa**:
+- Kiểm tra toàn bộ chỉ được thực hiện ở lần khởi động đầu tiên trong vòng đời của Worker
+- Sử dụng truy vấn nhanh (`SELECT 1 FROM table LIMIT 1`) để xác minh rằng bảng tồn tại
+- Nếu bảng tồn tại, bỏ qua việc khởi tạo trực tiếp
+- Đã xóa tất cả các kiểm tra cấu trúc bảng thời gian chạy
 
-### 2. 标准化表结构
-**优化前**：
-- 每次插入数据前检查列是否存在
-- 动态构建 SQL 语句
-- 使用缓存的表结构信息
+### 2. Cấu trúc bảng chuẩn
+**Trước khi tối ưu hóa**:
+- Kiểm tra xem cột có tồn tại hay không trước khi chèn dữ liệu mỗi lần
+- Xây dựng câu lệnh SQL động
+- Sử dụng thông tin cấu trúc bảng được lưu trữ
 
-**优化后**：
-- 使用固定的表结构（在 `d1-init.sql` 中定义）
-- 直接使用标准列名插入数据
-- 如果列不存在会直接报错，便于排查问题
+**Sau khi tối ưu hóa**:
+- Sử dụng cấu trúc bảng cố định (được xác định trong `d1-init.sql`)
+- Chèn dữ liệu trực tiếp bằng tên cột tiêu chuẩn
+- Nếu cột không tồn tại sẽ báo lỗi trực tiếp để tiện khắc phục sự cố.
 
-### 3. 独立的数据库设置脚本
-创建了 `d1-init.sql` 文件，用于首次部署时初始化数据库结构。
+### 3. Kịch bản thiết lập cơ sở dữ liệu độc lập
+Tệp `d1-init.sql` được tạo để khởi tạo cấu trúc cơ sở dữ liệu trong lần triển khai đầu tiên.
 
-**使用方法**：
+**Cách sử dụng**:
 ```bash
-# 首次部署时执行
+# Thực thi khi triển khai lần đầu
 wrangler d1 execute DB --file=./d1-init.sql
 ```
 
-## 代码变更
+## Thay đổi mã
 
 ### database.js
-1. **initDatabase()**: 简化为轻量级检查
-2. **performFirstTimeSetup()**: 新增首次启动设置函数
-3. **setupDatabase()**: 新增完整数据库设置函数（可供手动执行）
-4. **ensureUsersTables()**: 简化为仅创建表
-5. **ensureSentEmailsTable()**: 简化为仅创建表
-6. **recordSentEmail()**: 移除回退创建表逻辑
+1. **initDatabase()**: đơn giản hóa để kiểm tra nhẹ
+2. **performFirstTimeSetup()**: Đã thêm chức năng cài đặt khởi động lần đầu
+3. **setupDatabase()**: Đã thêm chức năng thiết lập cơ sở dữ liệu hoàn chỉnh (có sẵn để thực hiện thủ công)
+4. **ensureUsersTables()**: Đơn giản hóa để chỉ tạo bảng
+5. **ensureSentEmailsTable()**: Đơn giản hóa để chỉ tạo bảng
+6. **recordSentEmail()**: Xóa logic tạo bảng dự phòng
 
 ### server.js
-1. 移除邮件接收处理中的表结构检测
-2. 直接使用标准列名插入数据
+1. Loại bỏ tính năng phát hiện cấu trúc bảng trong xử lý nhận email
+2. Chèn dữ liệu trực tiếp bằng tên cột tiêu chuẩn
 
 ### apiHandlers.js
-1. 移除 `ensureSentEmailsTable` 的导入和调用
-2. 移除测试邮件接收中的表结构检测
+1. Xóa quá trình nhập và gọi `ensureSentEmailsTable`
+2. Loại bỏ tính năng phát hiện cấu trúc bảng trong quá trình nhận email kiểm tra
 
-## 性能提升
+## Cải tiến hiệu suất
 
-### 行读取减少
-- **每次 Worker 启动**: 从约 20-30 次查询减少到 3-4 次快速查询
-- **邮件接收**: 从检查表结构 + 插入减少到仅插入操作
-- **API 调用**: 无需额外的表结构检查
+### Giảm việc đọc hàng
+- **Mỗi lần bắt đầu của mỗi công nhân**: Giảm từ ~20-30 truy vấn xuống còn 3-4 truy vấn nhanh
+- **Nhận thư**: Giảm từ cấu trúc danh sách kiểm tra + Thao tác chèn vào chỉ chèn
+- ** Lệnh gọi API **: không cần kiểm tra cấu trúc bảng bổ sung
 
-### 启动速度
-- Worker 冷启动速度提升约 30-50%
-- 热启动几乎无数据库初始化开销
+### Tốc độ khởi động
+- Tốc độ khởi động nguội của công nhân tăng khoảng 30-50%
+- Khởi động ấm hầu như không có chi phí khởi tạo cơ sở dữ liệu
 
-## 部署建议
+## Đề xuất triển khai
 
-### 首次部署
-1. 执行 SQL 初始化脚本创建表结构
-2. 部署 Worker 代码
-3. 验证系统正常运行
+### Triển khai lần đầu
+1. Thực thi script khởi tạo SQL để tạo cấu trúc bảng
+2. Triển khai mã Worker
+3. Xác minh rằng hệ thống đang hoạt động bình thường
 
-### 更新部署
-1. 直接部署新代码即可
-2. 如果表结构已存在，初始化会自动跳过
+### Cập nhật triển khai
+1. Chỉ cần triển khai trực tiếp mã mới
+2. Nếu cấu trúc bảng đã tồn tại, việc khởi tạo sẽ tự động bị bỏ qua.
 
-### 表结构变更
-如果需要修改表结构：
-1. 更新 `d1-init.sql` 文件
-2. 手动执行 `ALTER TABLE` 语句添加新列
-3. 更新代码中的插入/查询语句
-4. 部署新代码
+### Thay đổi cấu trúc bảng
+Nếu bạn cần sửa đổi cấu trúc bảng:
+1. Cập nhật tệp `d1-init.sql`
+2. Thực thi câu lệnh `ALTER TABLE` theo cách thủ công để thêm cột mới
+3. Cập nhật câu lệnh chèn/truy vấn trong mã
+4. Triển khai mã mới
 
-## 注意事项
+## Ghi chú
 
-1. **表结构固定**: 系统假设表结构已正确创建，不会自动修复缺失的列
-2. **错误提示**: 如果表或列不存在，会直接抛出错误，便于排查问题
-3. **兼容性**: 与 Cloudflare D1 平台完全兼容
-4. **无缝升级**: 对于已有数据库，首次启动会快速验证并跳过初始化
+1. **Cấu trúc bảng đã được sửa**: Hệ thống giả định rằng cấu trúc bảng đã được tạo chính xác và sẽ không tự động sửa chữa các cột bị thiếu.
+2. **Thông báo lỗi**: Nếu bảng hoặc cột không tồn tại, lỗi sẽ được đưa ra trực tiếp để hỗ trợ khắc phục sự cố.
+3. **Khả năng tương thích**: Hoàn toàn tương thích với nền tảng Cloudflare D1
+4. **Nâng cấp liền mạch**: Đối với cơ sở dữ liệu hiện có, lần khởi động đầu tiên sẽ nhanh chóng xác minh và bỏ qua quá trình khởi tạo.
 
-## 监控建议
+## Đề xuất giám sát
 
-建议监控以下指标：
-- D1 数据库行读取次数（每日）
-- Worker 启动时间
-- 数据库错误率
+Nên theo dõi các chỉ số sau:
+- Số lần đọc hàng cơ sở dữ liệu D1 (hàng ngày)
+- Thời gian khởi động của công nhân
+- Tỷ lệ lỗi cơ sở dữ liệu
 
-如果发现表不存在的错误，说明需要执行初始化 SQL 脚本。
+Nếu phát hiện thấy lỗi bảng không tồn tại, điều đó có nghĩa là tập lệnh SQL khởi tạo cần được thực thi.
 

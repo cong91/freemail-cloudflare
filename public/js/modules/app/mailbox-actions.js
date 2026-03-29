@@ -35,7 +35,7 @@ export async function generateMailbox(elements, lenRange, domainSelect, api, sho
   const { gen, email, emailActions, listCard } = elements;
   
   try {
-    setButtonLoading(gen, '生成中…');
+    setButtonLoading(gen, 'Đang tạo…');
     const len = Number(lenRange?.value || getStoredLength());
     const domainIndex = getSelectedDomainIndex(domainSelect);
     
@@ -58,14 +58,14 @@ export async function generateMailbox(elements, lenRange, domainSelect, api, sho
       }
     } catch(_) {}
     
-    showMailboxCreatedToast(showToast, '邮箱生成成功！', data.routing);
+    showMailboxCreatedToast(showToast, 'Tạo hộp thư thành công!', data.routing);
     startAutoRefresh(autoRefreshCallback);
     await refresh();
     
     resetMbPage();
     await loadMailboxes({ forceFresh: true });
   } catch(e) {
-    showToast(e.message || '生成失败', 'error');
+    showToast(e.message || 'Tạo thất bại', 'error');
   } finally {
     restoreButton(gen);
   }
@@ -86,7 +86,7 @@ export async function generateNameMailbox(elements, lenRange, domainSelect, api,
   const { genName } = elements;
   
   try {
-    setButtonLoading(genName, '生成中…');
+    setButtonLoading(genName, 'Đang tạo…');
     const len = Number(lenRange?.value || getStoredLength());
     const domainIndex = getSelectedDomainIndex(domainSelect);
     const localName = generateRandomId(len);
@@ -114,14 +114,14 @@ export async function generateNameMailbox(elements, lenRange, domainSelect, api,
       }
     } catch(_) {}
     
-    showMailboxCreatedToast(showToast, '随机人名邮箱生成成功！', data.routing);
+    showMailboxCreatedToast(showToast, 'Tạo hộp thư tên ngẫu nhiên thành công!', data.routing);
     startAutoRefresh(autoRefreshCallback);
     await refresh();
     
     resetMbPage();
     await loadMailboxes({ forceFresh: true });
   } catch(e) {
-    showToast(e.message || '生成失败', 'error');
+    showToast(e.message || 'Tạo thất bại', 'error');
   } finally {
     restoreButton(genName);
   }
@@ -141,7 +141,7 @@ export async function createCustomMailbox(elements, domainSelect, api, showToast
   try {
     const local = (customLocalOverlay?.value || '').trim();
     if (!/^[A-Za-z0-9._-]{1,64}$/.test(local)) {
-      showToast('用户名不合法，仅限字母/数字/._-', 'warn');
+      showToast('Tên người dùng không hợp lệ, chỉ cho phép chữ/số/._-', 'warn');
       return;
     }
     const domainIndex = getSelectedDomainIndex(domainSelect);
@@ -159,10 +159,10 @@ export async function createCustomMailbox(elements, domainSelect, api, showToast
     updateEmailDisplay(elements, data.email);
     if (customOverlay) customOverlay.style.display = 'none';
     
-    showMailboxCreatedToast(showToast, `已创建邮箱：${data.email}`, data.routing);
+    showMailboxCreatedToast(showToast, `Đã tạo hộp thư: ${data.email}`, data.routing);
     await loadMailboxes({ forceFresh: true });
   } catch(e) {
-    showToast(e.message || '创建失败', 'error');
+    showToast(e.message || 'Tạo thất bại', 'error');
   }
 }
 
@@ -229,11 +229,11 @@ export async function toggleMailboxPin(event, address, api, showToast, loadMailb
   try {
     const r = await api(`/api/mailboxes/pin?address=${encodeURIComponent(address)}`, { method: 'POST' });
     if (r.ok) {
-      showToast('操作成功', 'success');
+      showToast('Thao tác thành công', 'success');
       await loadMailboxes({ forceFresh: true });
     }
   } catch(e) {
-    showToast(e.message || '操作失败', 'error');
+    showToast(e.message || 'Thao tác thất bại', 'error');
   }
 }
 
@@ -249,16 +249,16 @@ export async function toggleMailboxPin(event, address, api, showToast, loadMailb
  */
 export async function deleteMailboxAddress(event, address, elements, api, showToast, showConfirm, loadMailboxes) {
   event.stopPropagation();
-  const confirmed = await showConfirm(`确定删除邮箱 ${address}？所有邮件将被清空。`);
+  const confirmed = await showConfirm(`Bạn có chắc muốn xóa hộp thư ${address}? Tất cả email sẽ bị xóa.`);
   if (!confirmed) return;
   
   try {
     const r = await api(`/api/mailboxes?address=${encodeURIComponent(address)}`, { method: 'DELETE' });
     if (r.ok) {
-      showToast('邮箱已删除', 'success');
+      showToast('Hộp thư đã bị xóa', 'success');
       if (getCurrentMailbox() === address) {
         clearCurrentMailbox();
-        if (elements.email) elements.email.textContent = '点击生成邮箱';
+        if (elements.email) elements.email.textContent = 'Nhấn để tạo hộp thư';
         elements.email?.classList.remove('has-email');
         if (elements.emailActions) elements.emailActions.style.display = 'none';
         if (elements.list) elements.list.innerHTML = '';
@@ -267,7 +267,7 @@ export async function deleteMailboxAddress(event, address, elements, api, showTo
       await loadMailboxes({ forceFresh: true });
     }
   } catch(e) {
-    showToast(e.message || '删除失败', 'error');
+    showToast(e.message || 'Xóa thất bại', 'error');
   }
 }
 
@@ -278,14 +278,14 @@ export async function deleteMailboxAddress(event, address, elements, api, showTo
 export async function copyMailboxAddress(showToast) {
   const mailbox = getCurrentMailbox();
   if (!mailbox) {
-    showToast('请先生成或选择一个邮箱', 'warn');
+    showToast('Vui lòng tạo hoặc chọn một hộp thư trước', 'warn');
     return;
   }
   try {
     await navigator.clipboard.writeText(mailbox);
-    showToast(`已复制：${mailbox}`, 'success');
+    showToast(`Đã sao chép: ${mailbox}`, 'success');
   } catch(_) {
-    showToast('复制失败', 'error');
+    showToast('Sao chép thất bại', 'error');
   }
 }
 
@@ -299,20 +299,20 @@ export async function copyMailboxAddress(showToast) {
 export async function clearAllEmails(api, showToast, showConfirm, refresh) {
   const mailbox = getCurrentMailbox();
   if (!mailbox) {
-    showToast('请先选择一个邮箱', 'warn');
+    showToast('Vui lòng chọn một hộp thư trước', 'warn');
     return;
   }
-  const confirmed = await showConfirm(`确定清空 ${mailbox} 的所有邮件？`);
+  const confirmed = await showConfirm(`Bạn có chắc muốn xóa toàn bộ email của ${mailbox}?`);
   if (!confirmed) return;
   
   try {
     const r = await api(`/api/emails?mailbox=${encodeURIComponent(mailbox)}`, { method: 'DELETE' });
     if (r.ok) {
-      showToast('邮件已清空', 'success');
+      showToast('Email đã được xóa hết', 'success');
       await refresh();
     }
   } catch(e) {
-    showToast(e.message || '清空失败', 'error');
+    showToast(e.message || 'Xóa hết thất bại', 'error');
   }
 }
 

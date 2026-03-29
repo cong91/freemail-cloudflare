@@ -24,7 +24,7 @@ export async function showEmailDetail(id, elements, api, showToast) {
       setEmailCache(id, email);
     }
     
-    modalSubject.innerHTML = `<span class="modal-icon">📧</span><span>${escapeHtml(email.subject || '(无主题)')}</span>`;
+    modalSubject.innerHTML = `<span class="modal-icon">📧</span><span>${escapeHtml(email.subject || '(Không có tiêu đề)')}</span>`;
     
     let contentHtml = '';
     const code = email.verification_code || extractCode(email.content || email.html_content || '');
@@ -33,8 +33,8 @@ export async function showEmailDetail(id, elements, api, showToast) {
       contentHtml += `
         <div class="verification-code-box" style="margin-bottom:16px;padding:12px;background:var(--success-light);border-radius:8px;display:flex;align-items:center;gap:12px">
           <span style="font-size:20px">🔑</span>
-          <span style="font-size:18px;font-weight:600;font-family:monospace;cursor:pointer" onclick="navigator.clipboard.writeText('${code}').then(()=>showToast('验证码已复制','success'))">${code}</span>
-          <span style="font-size:12px;color:var(--text-muted)">点击复制</span>
+          <span style="font-size:18px;font-weight:600;font-family:monospace;cursor:pointer" onclick="navigator.clipboard.writeText('${code}').then(()=>showToast('Mã xác minh đã được sao chép','success'))">${code}</span>
+          <span style="font-size:12px;color:var(--text-muted)">Nhấn để sao chép</span>
         </div>`;
     }
     
@@ -47,7 +47,7 @@ export async function showEmailDetail(id, elements, api, showToast) {
     modalContent.innerHTML = contentHtml;
     modal.classList.add('show');
   } catch(e) {
-    showToast(e.message || '加载失败', 'error');
+    showToast(e.message || 'Tải thất bại', 'error');
   }
 }
 
@@ -60,17 +60,17 @@ export async function showEmailDetail(id, elements, api, showToast) {
  * @param {Function} refresh - 刷新函数
  */
 export async function deleteEmailById(id, api, showToast, showConfirm, refresh) {
-  const confirmed = await showConfirm('确定删除这封邮件？');
+  const confirmed = await showConfirm('Bạn có chắc muốn xóa email này?');
   if (!confirmed) return;
   
   try {
     const r = await api(`/api/email/${id}`, { method: 'DELETE' });
     if (r.ok) {
-      showToast('邮件已删除', 'success');
+      showToast('Email đã bị xóa', 'success');
       await refresh();
     }
   } catch(e) {
-    showToast(e.message || '删除失败', 'error');
+    showToast(e.message || 'Xóa thất bại', 'error');
   }
 }
 
@@ -83,17 +83,17 @@ export async function deleteEmailById(id, api, showToast, showConfirm, refresh) 
  * @param {Function} refresh - 刷新函数
  */
 export async function deleteSentById(id, api, showToast, showConfirm, refresh) {
-  const confirmed = await showConfirm('确定删除这条发送记录？');
+  const confirmed = await showConfirm('Bạn có chắc muốn xóa bản ghi gửi này?');
   if (!confirmed) return;
   
   try {
     const r = await api(`/api/sent/${id}`, { method: 'DELETE' });
     if (r.ok) {
-      showToast('记录已删除', 'success');
+      showToast('Bản ghi đã bị xóa', 'success');
       await refresh();
     }
   } catch(e) {
-    showToast(e.message || '删除失败', 'error');
+    showToast(e.message || 'Xóa thất bại', 'error');
   }
 }
 
@@ -111,9 +111,9 @@ export async function copyFromEmailList(event, id, api, showToast) {
   if (code) {
     try {
       await navigator.clipboard.writeText(code);
-      showToast(`验证码 ${code} 已复制`, 'success');
+      showToast(`Mã xác minh ${code} đã được sao chép`, 'success');
     } catch(_) {
-      showToast('复制失败', 'error');
+      showToast('Sao chép thất bại', 'error');
     }
   } else {
     let email = getEmailFromCache(id);
@@ -125,9 +125,9 @@ export async function copyFromEmailList(event, id, api, showToast) {
     const text = email.content || email.html_content?.replace(/<[^>]+>/g, ' ') || '';
     try {
       await navigator.clipboard.writeText(text.slice(0, 500));
-      showToast('内容已复制', 'success');
+      showToast('Nội dung đã được sao chép', 'success');
     } catch(_) {
-      showToast('复制失败', 'error');
+      showToast('Sao chép thất bại', 'error');
     }
   }
 }

@@ -1,90 +1,90 @@
-# API 接口文档
+# Tài liệu giao diện API
 
-## 目录
+## Mục lục
 
-- [认证与权限](#认证与权限)
-- [认证相关](#认证相关)
-- [邮箱管理](#邮箱管理)
-- [邮箱设置](#邮箱设置)
-- [邮件操作](#邮件操作)
-- [邮件发送](#邮件发送)
-- [用户管理](#用户管理)
-- [系统接口](#系统接口)
+- [Xác thực và quyền](#Xác thực và quyền)
+- [Chứng chỉ liên quan](#Liên quan xác thực)
+- [Quản lý hộp thư](#Quản lý hộp thư)
+- [Cài đặt email](#Cài đặt hộp thư)
+- [Thao tác thư](#Thao tác email)
+- [Gửi qua email](#Gửi email)
+- [Quản lý người dùng](#Quản lý người dùng)
+- [Giao diện hệ thống](#Giao diện hệ thống)
 
 ---
 
-## 认证与权限
+## Xác thực và quyền
 
-### 🔐 根管理员令牌（Root Admin Override）
+### 🔐 Ghi đè quản trị viên gốc
 
-当请求方携带与服务端环境变量 `JWT_TOKEN` 完全一致的令牌时，将跳过会话 Cookie/JWT 校验，直接被识别为最高管理员（strictAdmin）。
+Khi người yêu cầu mang mã thông báo giống hệt với biến môi trường máy chủ `JWT_TOKEN`, xác minh cookie phiên/JWT sẽ bị bỏ qua và được xác định trực tiếp là quản trị viên cao nhất (strictAdmin).
 
-**配置项：**
-- `wrangler.toml` → `[vars]` → `JWT_TOKEN="你的超管令牌"`
+**Các mục cấu hình:**
+- `wrangler.toml` → `[vars]` → `JWT_TOKEN="Mã thông báo quản trị của bạn"`
 
-**令牌携带方式（任选其一）：**
-- Header（标准）：`Authorization: Bearer <JWT_TOKEN>`
-- Header（自定义）：`X-Admin-Token: <JWT_TOKEN>`
+**Phương thức mang mã thông báo (chọn một):**
+- Tiêu đề (tiêu chuẩn): `Authorization: Bearer <JWT_TOKEN>`
+- Tiêu đề (tùy chỉnh): `X-Admin-Token: <JWT_TOKEN>`
 - Query：`?admin_token=<JWT_TOKEN>`
 
-**生效范围：**
-- 所有受保护的后端接口：`/api/*`
-- 会话检查：`GET /api/session`
-- 收信回调：`POST /receive`
-- 管理页服务端访问判定（`/admin`/`/admin.html`）与未知路径的认证判断
+**Phạm vi hiệu quả:**
+- Tất cả các giao diện phụ trợ được bảo vệ: `/api/*`
+- Kiểm tra phiên: `GET /api/session`
+- Nhận cuộc gọi lại: `POST /receive`
+- Phán quyết truy cập máy chủ trang quản lý (`/admin`/`/admin.html`) và phán đoán xác thực đường dẫn không xác định
 
-**行为说明：**
-- 命中令牌后，鉴权载荷为：`{ role: 'admin', username: '__root__', userId: 0 }`
-- `strictAdmin` 判定对 `__root__` 为 true（与严格管理员等价）
-- 若未携带或不匹配，则回退到原有 Cookie/JWT 会话验证
+**Mô tả hành vi:**
+- Sau khi nhấn token, payload xác thực là: `{ role: 'admin', username: '__root__', userId: 0 }`
+- `strictAdmin` đánh giá là đúng cho `__root__` (tương đương với quản trị viên nghiêm ngặt)
+- Nếu không được mang theo hoặc không khớp, nó sẽ quay lại xác minh phiên Cookie/JWT ban đầu.
 
-**使用示例：**
+**Ví dụ sử dụng:**
 
 ```bash
-# Authorization 头
+# Header Authorization
 curl -H "Authorization: Bearer <JWT_TOKEN>" https://your.domain/api/mailboxes
 
-# X-Admin-Token 头
+# Header X-Admin-Token
 curl -H "X-Admin-Token: <JWT_TOKEN>" https://your.domain/api/domains
 
-# Query 参数
+# Tham số Query
 curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 ```
 
-**安全提示：** 严格保密 `JWT_TOKEN`，并定期更换。
+**Mẹo an toàn:** Giữ bí mật tuyệt đối `JWT_TOKEN` và thay đổi thường xuyên.
 
-### 用户角色
+### Vai trò của người dùng
 
-| 角色 | 说明 |
+| Vai trò | Mô tả |
 |------|------|
-| `strictAdmin` | 最高管理员，完全系统访问权限 |
-| `admin` | 管理员，用户管理和邮箱控制 |
-| `user` | 普通用户，只能管理分配的邮箱 |
-| `mailbox` | 邮箱用户，只能访问自己的单个邮箱 |
-| `guest` | 访客，只读模拟数据 |
+| `strictAdmin` | Quản trị viên hàng đầu, toàn quyền truy cập hệ thống |
+| `admin` | Quản trị viên, Quản lý người dùng và Kiểm soát hộp thư |
+| `user` | Người dùng thông thường chỉ có thể quản lý các hộp thư được chỉ định |
+| `mailbox` | Người dùng email chỉ có thể truy cập vào địa chỉ email duy nhất của riêng họ |
+| `guest` | Dữ liệu mô phỏng khách, chỉ đọc |
 
 ---
 
-## 认证相关
+## Chứng nhận liên quan
 
 ### POST /api/login
-用户登录
+Đăng nhập người dùng
 
-**请求参数：**
+**Thông số yêu cầu:**
 ```json
 {
-  "username": "用户名或邮箱地址",
-  "password": "密码"
+  "username": "Tên người dùng hoặc địa chỉ email",
+  "password": "Mật khẩu"
 }
 ```
 
-**支持的登录方式：**
-1. 管理员登录：使用 `ADMIN_NAME` / `ADMIN_PASSWORD` 环境变量
-2. 访客登录：用户名 `guest`，密码为 `GUEST_PASSWORD` 环境变量
-3. 普通用户登录：数据库 `users` 表中的用户
-4. 邮箱登录：使用邮箱地址登录（需启用 `can_login`）
+**Các phương thức đăng nhập được hỗ trợ:**
+1. Đăng nhập quản trị viên: sử dụng biến môi trường `ADMIN_NAME` / `ADMIN_PASSWORD`
+2. Đăng nhập với tư cách khách: tên người dùng `guest`, mật khẩu `GUEST_PASSWORD` biến môi trường
+3. Đăng nhập người dùng thông thường: người dùng trong bảng `users` cơ sở dữ liệu
+4. Đăng nhập email: Đăng nhập bằng địa chỉ email của bạn (cần bật `can_login`)
 
-**返回示例：**
+**Ví dụ trả về:**
 ```json
 {
   "success": true,
@@ -95,17 +95,17 @@ curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 ```
 
 ### POST /api/logout
-用户退出登录
+Người dùng đăng xuất
 
-**返回：**
+**trở lại:**
 ```json
 { "success": true }
 ```
 
 ### GET /api/session
-验证当前会话状态
+Xác minh trạng thái phiên hiện tại
 
-**返回：**
+**trở lại:**
 ```json
 {
   "authenticated": true,
@@ -117,26 +117,26 @@ curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 
 ---
 
-## 邮箱管理
+## Quản lý email
 
 ### GET /api/domains
-获取可用域名列表
+Nhận danh sách các tên miền có sẵn
 
-**返回：**
+**trở lại:**
 ```json
 ["example.com", "mail.example.com"]
 ```
 
 ### GET /api/generate
-随机生成新的临时邮箱
+Tạo ngẫu nhiên một hộp thư tạm thời mới
 
-**参数：**
-| 参数 | 类型 | 说明 |
+**tham số:**
+| Thông số | Loại | Mô tả |
 |------|------|------|
-| `length` | number | 可选，随机字符串长度 |
-| `domainIndex` | number | 可选，选择域名索引（默认 0） |
+| `length` | số | Độ dài chuỗi ngẫu nhiên, tùy chọn |
+| `domainIndex` | số | Tùy chọn, chọn chỉ mục tên miền (mặc định 0) |
 
-**返回：**
+**trở lại:**
 ```json
 {
   "email": "abc123@example.com",
@@ -145,9 +145,9 @@ curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 ```
 
 ### POST /api/create
-自定义创建邮箱
+Tạo hộp thư tùy chỉnh
 
-**请求参数：**
+**Thông số yêu cầu:**
 ```json
 {
   "local": "myname",
@@ -155,7 +155,7 @@ curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 }
 ```
 
-**返回：**
+**trở lại:**
 ```json
 {
   "email": "myname@example.com",
@@ -164,18 +164,18 @@ curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 ```
 
 ### GET /api/mailboxes
-获取当前用户的邮箱列表
+Lấy danh sách email của người dùng hiện tại
 
-**参数：**
-| 参数 | 类型 | 说明 |
+**tham số:**
+| Thông số | Loại | Mô tả |
 |------|------|------|
-| `limit` | number | 分页大小（默认 100，最大 500） |
-| `offset` | number | 偏移量 |
-| `domain` | string | 按域名筛选 |
-| `favorite` | boolean | 按收藏状态筛选 |
-| `forward` | boolean | 按转发状态筛选 |
+| `limit` | số | Kích thước phân trang (mặc định 100, tối đa 500) |
+| `offset` | số | bù đắp |
+| `domain` | chuỗi | Lọc theo tên miền |
+| `favorite` | boolean | Lọc theo trạng thái bộ sưu tập |
+| `forward` | boolean | Lọc theo trạng thái chuyển tiếp |
 
-**返回：**
+**trở lại:**
 ```json
 [
   {
@@ -192,22 +192,22 @@ curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 ```
 
 ### DELETE /api/mailboxes
-删除指定邮箱
+Xóa hộp thư được chỉ định
 
-**参数：**
-| 参数 | 类型 | 说明 |
+**tham số:**
+| Thông số | Loại | Mô tả |
 |------|------|------|
-| `address` | string | 要删除的邮箱地址 |
+| `address` | chuỗi | Địa chỉ email cần xóa |
 
-**返回：**
+**trở lại:**
 ```json
 { "success": true, "deleted": true }
 ```
 
 ### GET /api/user/quota
-获取当前用户的邮箱配额
+Nhận hạn ngạch hộp thư của người dùng hiện tại
 
-**返回（普通用户）：**
+**Trở về (người dùng bình thường):**
 ```json
 {
   "limit": 10,
@@ -216,46 +216,46 @@ curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 }
 ```
 
-**返回（管理员）：**
+**Quay lại (quản trị viên):**
 ```json
 {
   "limit": -1,
   "used": 150,
   "remaining": -1,
-  "note": "管理员无邮箱数量限制"
+  "note": "Quản trị viên không giới hạn số lượng hộp thư"
 }
 ```
 
 ### POST /api/mailboxes/pin
-切换邮箱置顶状态
+Chuyển hộp thư về trạng thái trên cùng
 
-**参数：**
-| 参数 | 类型 | 说明 |
+**tham số:**
+| Thông số | Loại | Mô tả |
 |------|------|------|
-| `address` | string | 邮箱地址 |
+| `address` | chuỗi | Địa chỉ email |
 
-**返回：**
+**trở lại:**
 ```json
 { "success": true, "pinned": true }
 ```
 
 ### POST /api/mailboxes/reset-password
-重置邮箱密码（仅 strictAdmin）
+Đặt lại mật khẩu email (chỉ dành cho quản trị viên nghiêm ngặt)
 
-**参数：**
-| 参数 | 类型 | 说明 |
+**tham số:**
+| Thông số | Loại | Mô tả |
 |------|------|------|
-| `address` | string | 邮箱地址 |
+| `address` | chuỗi | Địa chỉ email |
 
-**返回：**
+**trở lại:**
 ```json
 { "success": true }
 ```
 
 ### POST /api/mailboxes/toggle-login
-切换邮箱登录权限（仅 strictAdmin）
+Chuyển đổi quyền đăng nhập email (chỉ dành cho quản trị viên nghiêm ngặt)
 
-**请求参数：**
+**Thông số yêu cầu:**
 ```json
 {
   "address": "test@example.com",
@@ -263,15 +263,15 @@ curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 }
 ```
 
-**返回：**
+**trở lại:**
 ```json
 { "success": true, "can_login": true }
 ```
 
 ### POST /api/mailboxes/change-password
-修改邮箱密码（仅 strictAdmin）
+Thay đổi mật khẩu email (chỉ dành cho quản trị viên nghiêm ngặt)
 
-**请求参数：**
+**Thông số yêu cầu:**
 ```json
 {
   "address": "test@example.com",
@@ -279,15 +279,15 @@ curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 }
 ```
 
-**返回：**
+**trở lại:**
 ```json
 { "success": true }
 ```
 
 ### POST /api/mailboxes/batch-toggle-login
-批量切换邮箱登录权限（仅 strictAdmin）
+Chuyển đổi quyền đăng nhập email theo đợt (chỉ dành cho quản trị viên nghiêm ngặt)
 
-**请求参数：**
+**Thông số yêu cầu:**
 ```json
 {
   "addresses": ["test1@example.com", "test2@example.com"],
@@ -295,7 +295,7 @@ curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 }
 ```
 
-**返回：**
+**trở lại:**
 ```json
 {
   "success": true,
@@ -310,12 +310,12 @@ curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 
 ---
 
-## 邮箱设置
+## Cài đặt email
 
 ### POST /api/mailbox/forward
-设置邮箱转发地址
+Thiết lập địa chỉ chuyển tiếp email
 
-**请求参数：**
+**Thông số yêu cầu:**
 ```json
 {
   "mailbox_id": 1,
@@ -323,15 +323,15 @@ curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 }
 ```
 
-**返回：**
+**trở lại:**
 ```json
 { "success": true }
 ```
 
 ### POST /api/mailbox/favorite
-切换邮箱收藏状态
+Chuyển trạng thái thu thập hộp thư
 
-**请求参数：**
+**Thông số yêu cầu:**
 ```json
 {
   "mailbox_id": 1,
@@ -339,15 +339,15 @@ curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 }
 ```
 
-**返回：**
+**trở lại:**
 ```json
 { "success": true }
 ```
 
 ### POST /api/mailboxes/batch-favorite
-批量设置收藏（按 ID，仅 strictAdmin）
+Đặt bộ sưu tập theo lô (theo ID, chỉ strictAdmin)
 
-**请求参数：**
+**Thông số yêu cầu:**
 ```json
 {
   "mailbox_ids": [1, 2, 3],
@@ -356,9 +356,9 @@ curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 ```
 
 ### POST /api/mailboxes/batch-forward
-批量设置转发（按 ID，仅 strictAdmin）
+Chuyển tiếp thiết lập hàng loạt (theo ID, chỉ strictAdmin)
 
-**请求参数：**
+**Thông số yêu cầu:**
 ```json
 {
   "mailbox_ids": [1, 2, 3],
@@ -367,9 +367,9 @@ curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 ```
 
 ### POST /api/mailboxes/batch-favorite-by-address
-批量设置收藏（按地址，仅 strictAdmin）
+Đặt mục yêu thích theo đợt (theo địa chỉ, chỉ strictAdmin)
 
-**请求参数：**
+**Thông số yêu cầu:**
 ```json
 {
   "addresses": ["test1@example.com", "test2@example.com"],
@@ -378,9 +378,9 @@ curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 ```
 
 ### POST /api/mailboxes/batch-forward-by-address
-批量设置转发（按地址，仅 strictAdmin）
+Đặt chuyển tiếp theo đợt (theo địa chỉ, chỉ strictAdmin)
 
-**请求参数：**
+**Thông số yêu cầu:**
 ```json
 {
   "addresses": ["test1@example.com", "test2@example.com"],
@@ -389,9 +389,9 @@ curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 ```
 
 ### PUT /api/mailbox/password
-邮箱用户修改自己的密码
+Người dùng email thay đổi mật khẩu của họ
 
-**请求参数：**
+**Thông số yêu cầu:**
 ```json
 {
   "currentPassword": "oldpassword",
@@ -399,57 +399,57 @@ curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 }
 ```
 
-**返回：**
+**trở lại:**
 ```json
-{ "success": true, "message": "密码修改成功" }
+{ "success": true, "message": "Đổi mật khẩu thành công" }
 ```
 
 ---
 
-## 邮件操作
+## Thao tác gửi email
 
 ### GET /api/emails
-获取邮件列表
+Nhận danh sách gửi thư
 
-**参数：**
-| 参数 | 类型 | 说明 |
+**tham số:**
+| Thông số | Loại | Mô tả |
 |------|------|------|
-| `mailbox` | string | 邮箱地址（必需） |
-| `limit` | number | 返回数量（默认 20，最大 50） |
+| `mailbox` | chuỗi | Địa chỉ email (bắt buộc) |
+| `limit` | số | Số lượng trả lại (mặc định 20, tối đa 50) |
 
-**返回：**
+**trở lại:**
 ```json
 [
   {
     "id": 1,
     "sender": "sender@example.com",
-    "subject": "邮件主题",
+    "subject": "Tiêu đề email",
     "received_at": "2024-01-01 12:00:00",
     "is_read": 0,
-    "preview": "邮件内容预览...",
+    "preview": "Xem trước nội dung email...",
     "verification_code": "123456"
   }
 ]
 ```
 
 ### GET /api/emails/batch
-批量获取邮件元数据
+Nhận siêu dữ liệu email theo đợt
 
-**参数：**
-| 参数 | 类型 | 说明 |
+**tham số:**
+| Thông số | Loại | Mô tả |
 |------|------|------|
-| `ids` | string | 逗号分隔的邮件 ID（最多 50 个） |
+| `ids` | chuỗi | ID tin nhắn được phân tách bằng dấu phẩy (tối đa 50) |
 
-**返回：**
+**trở lại:**
 ```json
 [
   {
     "id": 1,
     "sender": "sender@example.com",
     "to_addrs": "recipient@example.com",
-    "subject": "邮件主题",
+    "subject": "Tiêu đề email",
     "verification_code": "123456",
-    "preview": "预览...",
+    "preview": "Xem trước...",
     "r2_bucket": "mail-eml",
     "r2_object_key": "2024/01/01/test@example.com/xxx.eml",
     "received_at": "2024-01-01 12:00:00",
@@ -459,18 +459,18 @@ curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 ```
 
 ### GET /api/email/:id
-获取单封邮件详情
+Nhận thông tin chi tiết của một email
 
-**返回：**
+**trở lại:**
 ```json
 {
   "id": 1,
   "sender": "sender@example.com",
   "to_addrs": "recipient@example.com",
-  "subject": "邮件主题",
+  "subject": "Tiêu đề email",
   "verification_code": "123456",
-  "content": "纯文本内容",
-  "html_content": "<p>HTML内容</p>",
+  "content": "Nội dung văn bản thuần",
+  "html_content": "<p>Nội dung HTML</p>",
   "received_at": "2024-01-01 12:00:00",
   "is_read": 1,
   "download": "/api/email/1/download"
@@ -478,31 +478,31 @@ curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 ```
 
 ### GET /api/email/:id/download
-下载原始 EML 文件
+Tải xuống tệp EML gốc
 
-**返回：** `message/rfc822` 格式的原始邮件文件
+**Trả lại:** Tệp thư gốc ở định dạng `message/rfc822`
 
 ### DELETE /api/email/:id
-删除单封邮件
+Xóa một email duy nhất
 
-**返回：**
+**trở lại:**
 ```json
 {
   "success": true,
   "deleted": true,
-  "message": "邮件已删除"
+  "message": "Email đã bị xóa"
 }
 ```
 
 ### DELETE /api/emails
-清空邮箱所有邮件
+Xóa tất cả thư khỏi hộp thư
 
-**参数：**
-| 参数 | 类型 | 说明 |
+**tham số:**
+| Thông số | Loại | Mô tả |
 |------|------|------|
-| `mailbox` | string | 邮箱地址（必需） |
+| `mailbox` | chuỗi | Địa chỉ email (bắt buộc) |
 
-**返回：**
+**trở lại:**
 ```json
 {
   "success": true,
@@ -512,27 +512,27 @@ curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 
 ---
 
-## 邮件发送
+## Gửi email
 
-> 需要配置 `RESEND_API_KEY` 环境变量
+> Cần định cấu hình biến môi trường `RESEND_API_KEY`
 
 ### GET /api/sent
-获取发件记录列表
+Lấy danh sách hồ sơ gửi
 
-**参数：**
-| 参数 | 类型 | 说明 |
+**tham số:**
+| Thông số | Loại | Mô tả |
 |------|------|------|
-| `from` | string | 发件人邮箱（必需） |
-| `limit` | number | 返回数量（默认 20，最大 50） |
+| `from` | chuỗi | Địa chỉ email của người gửi (bắt buộc) |
+| `limit` | số | Số lượng trả lại (mặc định 20, tối đa 50) |
 
-**返回：**
+**trở lại:**
 ```json
 [
   {
     "id": 1,
     "resend_id": "abc123",
     "recipients": "to@example.com",
-    "subject": "邮件主题",
+    "subject": "Tiêu đề email",
     "created_at": "2024-01-01 12:00:00",
     "status": "delivered"
   }
@@ -540,18 +540,18 @@ curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 ```
 
 ### GET /api/sent/:id
-获取发件详情
+Nhận chi tiết vận chuyển
 
-**返回：**
+**trở lại:**
 ```json
 {
   "id": 1,
   "resend_id": "abc123",
   "from_addr": "from@example.com",
   "recipients": "to@example.com",
-  "subject": "邮件主题",
-  "html_content": "<p>内容</p>",
-  "text_content": "内容",
+  "subject": "Tiêu đề email",
+  "html_content": "<p>Nội dung</p>",
+  "text_content": "Nội dung",
   "status": "delivered",
   "scheduled_at": null,
   "created_at": "2024-01-01 12:00:00"
@@ -559,56 +559,56 @@ curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 ```
 
 ### DELETE /api/sent/:id
-删除发件记录
+Xóa hồ sơ gửi
 
-**返回：**
+**trở lại:**
 ```json
 { "success": true }
 ```
 
 ### POST /api/send
-发送单封邮件
+Gửi một email duy nhất
 
-**请求参数：**
+**Thông số yêu cầu:**
 ```json
 {
   "from": "sender@example.com",
-  "fromName": "发件人名称",
+  "fromName": "Tên người gửi",
   "to": "recipient@example.com",
-  "subject": "邮件主题",
-  "html": "<p>HTML内容</p>",
-  "text": "纯文本内容",
+  "subject": "Tiêu đề email",
+  "html": "<p>Nội dung HTML</p>",
+  "text": "Nội dung văn bản thuần",
   "scheduledAt": "2024-01-02T12:00:00Z"
 }
 ```
 
-**返回：**
+**trở lại:**
 ```json
 { "success": true, "id": "resend-id-xxx" }
 ```
 
 ### POST /api/send/batch
-批量发送邮件
+Gửi email hàng loạt
 
-**请求参数：**
+**Thông số yêu cầu:**
 ```json
 [
   {
     "from": "sender@example.com",
     "to": "recipient1@example.com",
-    "subject": "主题1",
-    "html": "<p>内容1</p>"
+    "subject": "Chủ đề 1",
+    "html": "<p>Nội dung 1</p>"
   },
   {
     "from": "sender@example.com",
     "to": "recipient2@example.com",
-    "subject": "主题2",
-    "html": "<p>内容2</p>"
+    "subject": "Chủ đề 2",
+    "html": "<p>Nội dung 2</p>"
   }
 ]
 ```
 
-**返回：**
+**trở lại:**
 ```json
 {
   "success": true,
@@ -620,12 +620,12 @@ curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 ```
 
 ### GET /api/send/:id
-查询发送结果（从 Resend API）
+Kết quả gửi truy vấn (từ API gửi lại)
 
 ### PATCH /api/send/:id
-更新发送状态或定时时间
+Cập nhật trạng thái gửi hoặc thời gian đã lên lịch
 
-**请求参数：**
+**Thông số yêu cầu:**
 ```json
 {
   "status": "canceled",
@@ -634,30 +634,30 @@ curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 ```
 
 ### POST /api/send/:id/cancel
-取消定时发送
+Hủy giao hàng theo lịch
 
-**返回：**
+**trở lại:**
 ```json
 { "success": true }
 ```
 
 ---
 
-## 用户管理
+## Quản lý người dùng
 
-> 以下接口需要 `strictAdmin` 权限
+> Các giao diện sau yêu cầu quyền `strictAdmin`
 
 ### GET /api/users
-获取用户列表
+Lấy danh sách người dùng
 
-**参数：**
-| 参数 | 类型 | 说明 |
+**tham số:**
+| Thông số | Loại | Mô tả |
 |------|------|------|
-| `limit` | number | 分页大小（默认 50，最大 100） |
-| `offset` | number | 偏移量 |
-| `sort` | string | 排序方式：`asc` 或 `desc`（默认 desc） |
+| `limit` | số | Kích thước phân trang (mặc định 50, tối đa 100) |
+| `offset` | số | bù đắp |
+| `sort` | chuỗi | Phương pháp sắp xếp: `asc` hoặc `desc` (mô tả mặc định) |
 
-**返回：**
+**trở lại:**
 ```json
 [
   {
@@ -673,9 +673,9 @@ curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 ```
 
 ### POST /api/users
-创建用户
+Tạo người dùng
 
-**请求参数：**
+**Thông số yêu cầu:**
 ```json
 {
   "username": "newuser",
@@ -685,7 +685,7 @@ curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 }
 ```
 
-**返回：**
+**trở lại:**
 ```json
 {
   "id": 2,
@@ -698,9 +698,9 @@ curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 ```
 
 ### PATCH /api/users/:id
-更新用户信息
+Cập nhật thông tin người dùng
 
-**请求参数：**
+**Thông số yêu cầu:**
 ```json
 {
   "username": "updatedname",
@@ -711,23 +711,23 @@ curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 }
 ```
 
-**返回：**
+**trở lại:**
 ```json
 { "success": true }
 ```
 
 ### DELETE /api/users/:id
-删除用户
+Xóa người dùng
 
-**返回：**
+**trở lại:**
 ```json
 { "success": true }
 ```
 
 ### GET /api/users/:id/mailboxes
-获取指定用户的邮箱列表
+Lấy danh sách email của người dùng được chỉ định
 
-**返回：**
+**trở lại:**
 ```json
 [
   {
@@ -739,9 +739,9 @@ curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 ```
 
 ### POST /api/users/assign
-给用户分配邮箱
+Gán email cho người dùng
 
-**请求参数：**
+**Thông số yêu cầu:**
 ```json
 {
   "username": "testuser",
@@ -749,15 +749,15 @@ curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 }
 ```
 
-**返回：**
+**trở lại:**
 ```json
 { "success": true }
 ```
 
 ### POST /api/users/unassign
-取消用户的邮箱分配
+Bỏ gán hộp thư của người dùng
 
-**请求参数：**
+**Thông số yêu cầu:**
 ```json
 {
   "username": "testuser",
@@ -765,37 +765,37 @@ curl "https://your.domain/api/session?admin_token=<JWT_TOKEN>"
 }
 ```
 
-**返回：**
+**trở lại:**
 ```json
 { "success": true }
 ```
 
 ---
 
-## 系统接口
+##Giao diện hệ thống
 
 ### POST /receive
-邮件接收回调（用于 Cloudflare Email Routing）
+Nhận email gọi lại (đối với Định tuyến email trên Cloudflare)
 
-> 需要认证，通常由系统内部调用
+> Yêu cầu xác thực, thường được hệ thống gọi nội bộ
 
 ---
 
-## 错误响应
+## Phản hồi lỗi
 
-所有 API 在发生错误时返回以下格式：
+Tất cả các API đều trả về định dạng sau khi xảy ra lỗi:
 
 ```json
 {
-  "error": "错误信息描述"
+  "error": "Mô tả thông tin lỗi"
 }
 ```
 
-**常见 HTTP 状态码：**
-| 状态码 | 说明 |
+**Mã trạng thái HTTP phổ biến:**
+| Mã trạng thái | Mô tả |
 |--------|------|
-| 400 | 请求参数错误 |
-| 401 | 未认证 |
-| 403 | 权限不足（演示模式限制或角色限制） |
-| 404 | 资源不存在 |
-| 500 | 服务器内部错误 |
+| 400 | Lỗi tham số yêu cầu |
+| 401 | Chưa được xác thực |
+| 403 | Không đủ quyền (hạn chế chế độ demo hoặc hạn chế vai trò) |
+| 404 | Tài nguyên không tồn tại |
+| 500 | Lỗi nội bộ máy chủ |

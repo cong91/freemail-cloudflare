@@ -28,7 +28,7 @@ export function showConfirm(message, onConfirm = null, onCancel = null, elements
       
       if (!els.confirmModal) {
         // 降级到原生 confirm
-        const result = confirm(message || '确认执行该操作？');
+        const result = confirm(message || 'Xác nhận thực hiện thao tác này?');
         resolve(result);
         if (result && onConfirm) onConfirm();
         if (!result && onCancel) onCancel();
@@ -90,8 +90,8 @@ export function showConfirm(message, onConfirm = null, onCancel = null, elements
       }
       
     } catch (err) {
-      console.error('确认对话框初始化失败:', err);
-      const result = confirm(message || '确认执行该操作？');
+      console.error('Khởi tạo hộp thoại xác nhận thất bại:', err);
+      const result = confirm(message || 'Xác nhận thực hiện thao tác này?');
       resolve(result);
       if (result && onConfirm) onConfirm();
       if (!result && onCancel) onCancel();

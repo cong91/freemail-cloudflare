@@ -3,14 +3,14 @@
  * @module modules/app/mailbox-list
  */
 
-import { formatTs, escapeHtml, escapeAttr } from './ui-helpers.js';
-import { getCurrentMailbox } from './mailbox-state.js';
+import { getCurrentMailbox } from "./mailbox-state.js";
+import { escapeAttr, escapeHtml, formatTs } from "./ui-helpers.js";
 
 // 分页状态
 const MB_PAGE_SIZE = 10;
 let mbPage = 1;
 let mbLastCount = 0;
-let mbSearchTerm = '';
+let mbSearchTerm = "";
 let isLoading = false;
 
 /**
@@ -20,22 +20,22 @@ let isLoading = false;
  * @returns {string}
  */
 export function renderMailboxItem(mailbox, isActive = false) {
-  const m = mailbox;
-  const address = escapeAttr(m.address);
-  const displayAddress = escapeHtml(m.address);
-  const isPinned = m.is_pinned ? 'pinned' : '';
-  const activeClass = isActive ? 'active' : '';
-  const time = formatTs(m.created_at);
-  
-  return `
+	const m = mailbox;
+	const address = escapeAttr(m.address);
+	const displayAddress = escapeHtml(m.address);
+	const isPinned = m.is_pinned ? "pinned" : "";
+	const activeClass = isActive ? "active" : "";
+	const time = formatTs(m.created_at);
+
+	return `
     <div class="mailbox-item ${isPinned} ${activeClass}" onclick="selectMailbox('${address}')">
       <div class="mailbox-content">
         <span class="address">${displayAddress}</span>
         <span class="time">${time}</span>
       </div>
       <div class="mailbox-actions">
-        <button class="btn btn-ghost btn-sm pin" onclick="togglePin(event,'${address}')" title="${m.is_pinned ? '取消置顶' : '置顶'}">${m.is_pinned ? '📌' : '📍'}</button>
-        <button class="btn btn-ghost btn-sm del" onclick="deleteMailbox(event,'${address}')" title="删除">🗑️</button>
+        <button class="btn btn-ghost btn-sm pin" onclick="togglePin(event,'${address}')" title="${m.is_pinned ? "Bỏ ghim" : "Ghim"}">${m.is_pinned ? "📌" : "📍"}</button>
+        <button class="btn btn-ghost btn-sm del" onclick="deleteMailbox(event,'${address}')" title="Xóa">🗑️</button>
       </div>
     </div>`;
 }
@@ -46,15 +46,18 @@ export function renderMailboxItem(mailbox, isActive = false) {
  * @param {HTMLElement} container - 容器
  */
 export function renderMailboxList(mailboxes, container) {
-  if (!container) return;
-  
-  if (!mailboxes || mailboxes.length === 0) {
-    container.innerHTML = '<div class="empty-state" style="text-align:center;color:#64748b;padding:20px">暂无邮箱</div>';
-    return;
-  }
-  
-  const currentMb = getCurrentMailbox();
-  container.innerHTML = mailboxes.map(m => renderMailboxItem(m, m.address === currentMb)).join('');
+	if (!container) return;
+
+	if (!mailboxes || mailboxes.length === 0) {
+		container.innerHTML =
+			'<div class="empty-state" style="text-align:center;color:#64748b;padding:20px">Chưa có hộp thư</div>';
+		return;
+	}
+
+	const currentMb = getCurrentMailbox();
+	container.innerHTML = mailboxes
+		.map((m) => renderMailboxItem(m, m.address === currentMb))
+		.join("");
 }
 
 /**
@@ -63,14 +66,15 @@ export function renderMailboxList(mailboxes, container) {
  * @param {number} total - 总数
  */
 export function renderMbPager(elements, total) {
-  try {
-    const totalPages = Math.max(1, Math.ceil(total / MB_PAGE_SIZE));
-    if (!elements.mbPager) return;
-    elements.mbPager.style.display = total > MB_PAGE_SIZE ? 'flex' : 'none';
-    if (elements.mbPageInfo) elements.mbPageInfo.textContent = `${mbPage} / ${totalPages}`;
-    if (elements.mbPrev) elements.mbPrev.disabled = mbPage <= 1;
-    if (elements.mbNext) elements.mbNext.disabled = mbPage >= totalPages;
-  } catch(_) {}
+	try {
+		const totalPages = Math.max(1, Math.ceil(total / MB_PAGE_SIZE));
+		if (!elements.mbPager) return;
+		elements.mbPager.style.display = total > MB_PAGE_SIZE ? "flex" : "none";
+		if (elements.mbPageInfo)
+			elements.mbPageInfo.textContent = `${mbPage} / ${totalPages}`;
+		if (elements.mbPrev) elements.mbPrev.disabled = mbPage <= 1;
+		if (elements.mbNext) elements.mbNext.disabled = mbPage >= totalPages;
+	} catch (_) {}
 }
 
 /**
@@ -78,7 +82,7 @@ export function renderMbPager(elements, total) {
  * @returns {number}
  */
 export function getCurrentPage() {
-  return mbPage;
+	return mbPage;
 }
 
 /**
@@ -86,7 +90,7 @@ export function getCurrentPage() {
  * @param {number} page - 页码
  */
 export function setCurrentPage(page) {
-  mbPage = page;
+	mbPage = page;
 }
 
 /**
@@ -94,7 +98,7 @@ export function setCurrentPage(page) {
  * @returns {number}
  */
 export function getPageSize() {
-  return MB_PAGE_SIZE;
+	return MB_PAGE_SIZE;
 }
 
 /**
@@ -102,10 +106,10 @@ export function getPageSize() {
  * @param {Function} loadFn - 加载函数
  */
 export function prevMbPage(loadFn) {
-  if (mbPage > 1) {
-    mbPage -= 1;
-    loadFn();
-  }
+	if (mbPage > 1) {
+		mbPage -= 1;
+		loadFn();
+	}
 }
 
 /**
@@ -114,19 +118,19 @@ export function prevMbPage(loadFn) {
  * @param {number} total - 总数
  */
 export function nextMbPage(loadFn, total) {
-  const totalPages = Math.max(1, Math.ceil(total / MB_PAGE_SIZE));
-  if (mbPage < totalPages) {
-    mbPage += 1;
-    loadFn();
-  }
+	const totalPages = Math.max(1, Math.ceil(total / MB_PAGE_SIZE));
+	if (mbPage < totalPages) {
+		mbPage += 1;
+		loadFn();
+	}
 }
 
 /**
  * 重置页码
  */
 export function resetMbPage() {
-  mbPage = 1;
-  mbLastCount = 0;
+	mbPage = 1;
+	mbLastCount = 0;
 }
 
 /**
@@ -134,7 +138,7 @@ export function resetMbPage() {
  * @param {string} term - 搜索词
  */
 export function setSearchTerm(term) {
-  mbSearchTerm = term;
+	mbSearchTerm = term;
 }
 
 /**
@@ -142,7 +146,7 @@ export function setSearchTerm(term) {
  * @returns {string}
  */
 export function getSearchTerm() {
-  return mbSearchTerm;
+	return mbSearchTerm;
 }
 
 /**
@@ -150,7 +154,7 @@ export function getSearchTerm() {
  * @param {boolean} loading - 是否加载中
  */
 export function setLoading(loading) {
-  isLoading = loading;
+	isLoading = loading;
 }
 
 /**
@@ -158,7 +162,7 @@ export function setLoading(loading) {
  * @returns {boolean}
  */
 export function isLoadingMailboxes() {
-  return isLoading;
+	return isLoading;
 }
 
 /**
@@ -166,7 +170,7 @@ export function isLoadingMailboxes() {
  * @param {number} count - 数量
  */
 export function setLastCount(count) {
-  mbLastCount = count;
+	mbLastCount = count;
 }
 
 /**
@@ -174,7 +178,7 @@ export function setLastCount(count) {
  * @returns {number}
  */
 export function getLastCount() {
-  return mbLastCount;
+	return mbLastCount;
 }
 
 /**
@@ -184,26 +188,28 @@ export function getLastCount() {
  * @returns {Array}
  */
 export function filterBySearch(mailboxes, term) {
-  if (!term || !term.trim()) return mailboxes;
-  const lowerTerm = term.toLowerCase().trim();
-  return mailboxes.filter(m => (m.address || '').toLowerCase().includes(lowerTerm));
+	if (!term || !term.trim()) return mailboxes;
+	const lowerTerm = term.toLowerCase().trim();
+	return mailboxes.filter((m) =>
+		(m.address || "").toLowerCase().includes(lowerTerm),
+	);
 }
 
 export default {
-  renderMailboxItem,
-  renderMailboxList,
-  renderMbPager,
-  getCurrentPage,
-  setCurrentPage,
-  getPageSize,
-  prevMbPage,
-  nextMbPage,
-  resetMbPage,
-  setSearchTerm,
-  getSearchTerm,
-  setLoading,
-  isLoadingMailboxes,
-  setLastCount,
-  getLastCount,
-  filterBySearch
+	renderMailboxItem,
+	renderMailboxList,
+	renderMbPager,
+	getCurrentPage,
+	setCurrentPage,
+	getPageSize,
+	prevMbPage,
+	nextMbPage,
+	resetMbPage,
+	setSearchTerm,
+	getSearchTerm,
+	setLoading,
+	isLoadingMailboxes,
+	setLastCount,
+	getLastCount,
+	filterBySearch,
 };

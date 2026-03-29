@@ -1,69 +1,69 @@
-# 邮箱置顶功能
+# Chức năng hàng đầu của hộp thư
 
-## 功能概述
+## Tổng quan về chức năng
 
-邮箱置顶功能允许用户将常用的邮箱地址固定在邮箱历史列表的顶部，方便快速访问和管理。
+Chức năng hàng đầu của hộp thư cho phép người dùng ghim các địa chỉ email được sử dụng thường xuyên vào đầu danh sách lịch sử hộp thư để truy cập và quản lý nhanh chóng.
 
-## 主要特性
+## Các tính năng chính
 
-### 1. 置顶/取消置顶
-- 点击邮箱项右侧的📍图标可以置顶邮箱
-- 置顶后图标变为📌，点击可以取消置顶
-- 置顶状态会持久保存到数据库
+### 1. Ghim/bỏ ghim
+- Bấm vào biểu tượng 📍 bên phải mục hộp thư để ghim hộp thư lên trên cùng
+- Sau khi ghim biểu tượng sẽ chuyển thành 👍. Nhấp để hủy ghim.
+- Trạng thái được ghim sẽ được lưu vào cơ sở dữ liệu
 
-### 2. 视觉标识
-- 置顶的邮箱会有特殊的背景色和边框
-- 置顶邮箱左上角显示📌标记
-- 鼠标悬停时显示操作按钮
+### 2. Nhận dạng hình ảnh
+- Hộp thư được ghim sẽ có màu nền và đường viền đặc biệt
+- Dấu ** hiển thị ở góc trên bên trái hộp thư được ghim
+- Hiển thị các nút hành động khi di chuột qua
 
-### 3. 智能排序
-- 置顶的邮箱始终显示在列表顶部
-- 同级别内按最后访问时间排序
-- 支持分页加载
+### 3. Phân loại thông minh
+- Email được ghim luôn xuất hiện ở đầu danh sách
+- Sắp xếp theo thời gian truy cập lần cuối trong cùng cấp độ
+- Hỗ trợ tải trang
 
-## 使用方法
+## Cách sử dụng
 
-### 置顶邮箱
-1. 在邮箱历史列表中找到要置顶的邮箱
-2. 鼠标悬停在邮箱项上，会显示📍按钮
-3. 点击📍按钮，邮箱将被置顶
+### Email được ghim
+1. Tìm email bạn muốn ghim lên đầu danh sách lịch sử email
+2. Di chuột qua mục hộp thư và nút 📍 sẽ được hiển thị.
+3. Nhấp vào nút 📍 và email sẽ được ghim lên trên cùng
 
-### 取消置顶
-1. 找到已置顶的邮箱（有📌标记）
-2. 鼠标悬停显示📌按钮
-3. 点击📌按钮，取消置顶
+### Hủy mã pin
+1. Tìm địa chỉ email đã ghim (có dấu ???)
+2. Hiển thị nút 📌 khi di chuột
+3. Nhấn vào nút 📌 để hủy mã pin.
 
-### 批量管理
-- 可以同时置顶多个邮箱
-- 置顶的邮箱会按置顶时间排序
-- 删除邮箱时会同时清除置顶状态
+### Quản lý hàng loạt
+- Bạn có thể ghim nhiều hộp thư cùng lúc
+- Các email được ghim sẽ được sắp xếp theo thời gian được ghim.
+- Khi xóa hộp thư, trạng thái đã ghim sẽ bị xóa đồng thời
 
-## 技术实现
+## Triển khai kỹ thuật
 
-### 数据库结构
+###Cấu trúc cơ sở dữ liệu
 ```sql
 ALTER TABLE mailboxes ADD COLUMN is_pinned INTEGER DEFAULT 0;
 CREATE INDEX idx_mailboxes_is_pinned ON mailboxes(is_pinned DESC);
 ```
 
-### API接口
-- `POST /api/mailboxes/pin?address=邮箱地址` - 切换置顶状态
-- `GET /api/mailboxes` - 返回按置顶状态排序的邮箱列表
+###Giao diện API
+- `POST /api/mailboxes/pin?address=Địa chỉ email` - Chuyển sang trạng thái trên cùng
+- `GET /api/mailboxes` - Trả về danh sách email được sắp xếp theo trạng thái được ghim
 
-### 前端交互
-- 实时更新置顶状态
-- 自动重新排序显示
-- 支持演示模式
+### Tương tác từ phía trước
+- Cập nhật trạng thái được ghim theo thời gian thực
+- Tự động sắp xếp lại hiển thị
+- Hỗ trợ chế độ demo
 
-## 兼容性
+## khả năng tương thích
 
-- 支持现有邮箱数据的自动迁移
-- 向后兼容，不影响现有功能
-- 演示模式下完全可用
+-Hỗ trợ tự động di chuyển dữ liệu hộp thư hiện có
+- Tương thích ngược, không ảnh hưởng đến chức năng hiện có
+- Hoàn toàn có thể sử dụng được ở chế độ demo
 
-## 注意事项
+## Ghi chú
 
-1. 置顶状态是用户级别的，不同用户之间不共享
-2. 删除邮箱时会同时清除置顶状态
-3. 置顶功能不影响邮件的接收和发送
-4. 支持离线演示模式
+1. Trạng thái được ghim là cấp độ người dùng và không được chia sẻ giữa những người dùng khác nhau.
+2. Khi xóa hộp thư, trạng thái đã ghim sẽ bị xóa đồng thời.
+3. Chức năng ghim không ảnh hưởng đến việc nhận và gửi email.
+4. Hỗ trợ chế độ trình diễn ngoại tuyến

@@ -1,32 +1,32 @@
 
-## 一键部署指南
+## Hướng dẫn triển khai bằng một cú nhấp chuột
 
-[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/idinging/freemail)
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/cong91/freemail-cloudflare)
 
-#### 1. 首先点击  Deploy to Cloudflare
+#### 1. Đầu tiên click vào Deploy to Cloudflare
 
-#### 2 登陆账号后会进入，推荐选择亚洲地区（当然不选择亚洲也没关系）
-`不要修改数据库名称和R2名称 可能导致无法查询`
+#### 2 Sau khi đăng nhập tài khoản xong bạn sẽ vào. Nên chọn Châu Á (tất nhiên không chọn Châu Á cũng không sao)
+`Không sửa tên cơ sở dữ liệu và tên R2, có thể dẫn tới không truy vấn được`
 ![5a0cc80913848aca4b5f4058538ad6aa|690x333](../pic/v4/depl1.png)
-#### 3. 点击创建部署，然后耐心等待克隆部署
+#### 3. Nhấp vào Tạo triển khai, sau đó kiên nhẫn chờ triển khai bản sao
 ![5a0cc80913848aca4b5f4058538ad6aa|690x333](../pic/v4/depl2.png)
 
-#### 4. 点击继续处理项目，绑定必须的环境变量
+#### 4. Nhấp để tiếp tục xử lý dự án và liên kết các biến môi trường cần thiết
 ![5a0cc80913848aca4b5f4058538ad6aa|690x333](../pic/v4/depl.png)
 
 ![5a0cc80913848aca4b5f4058538ad6aa|690x333](../pic/v4/depl5.png)
 
 
-#### 5. 添加完成后点击部署即可
+#### 5. Sau khi thêm xong nhấn Deploy
 
-    `注：这三个变量是必须的，其他变量例如 管理员名称，发邮件密钥可自行决定是否添加`
+`Lưu ý: Ba biến này là bắt buộc, các biến khác như tên quản trị viên và khóa gửi mail có thể tùy chọn thêm`
 
-    最后就可以打开对应的worker连接登陆了
+Cuối cùng, bạn có thể mở kết nối công nhân tương ứng và đăng nhập.
 
 ![5a0cc80913848aca4b5f4058538ad6aa|690x333](../pic/v4/depl5.jpeg)
 
-#### 6. 默认管理员账号为 admin
+#### 6. Tài khoản quản trị mặc định là admin
 
 
-#### 7. 记得将域名邮箱的catch-all 绑定到worker上（不绑定无法接收到邮件）
+#### 7. Hãy nhớ ràng buộc toàn bộ hộp thư tên miền với nhân viên (bạn không thể nhận email mà không ràng buộc)
 ![5a0cc80913848aca4b5f4058538ad6aa|690x333](../pic/v4/depl6.png)

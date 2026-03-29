@@ -30,13 +30,13 @@ async function doLogin(){
   if (isSubmitting) return;
   const user = (username.value || '').trim();
   const password = (pwd.value || '').trim();
-  if (!user){ err.textContent = '用户名不能为空'; await showToast('用户名不能为空','warn'); return; }
-  if (!password){ err.textContent = '密码不能为空'; await showToast('密码不能为空','warn'); return; }
+  if (!user){ err.textContent = 'Tên người dùng không được để trống'; await showToast('Tên người dùng không được để trống','warn'); return; }
+  if (!password){ err.textContent = 'Mật khẩu không được để trống'; await showToast('Mật khẩu không được để trống','warn'); return; }
   err.textContent = '';
   isSubmitting = true;
   btn.disabled = true;
   const original = btn.textContent;
-  btn.textContent = '正在登录…';
+  btn.textContent = 'Đang đăng nhập…';
 
   try{
     // 目标页：优先使用登录页上的 redirect 参数
@@ -66,7 +66,7 @@ async function doLogin(){
         }
         
         // 显示成功提示
-        await showToast('登录成功，正在跳转...', 'success');
+        await showToast('Đăng nhập thành công, đang chuyển hướng...', 'success');
         // 延时确保toast显示和cookie设置生效
         setTimeout(() => {
           location.replace(finalTarget);
@@ -74,10 +74,10 @@ async function doLogin(){
         return;
       }
     } else {
-      // 登录失败，显示错误信息
+      // Đăng nhập thất bại，显示错误信息
       const errorText = await response.text();
-      err.textContent = errorText || '登录失败';
-      await showToast(errorText || '登录失败', 'warn');
+      err.textContent = errorText || 'Đăng nhập thất bại';
+      await showToast(errorText || 'Đăng nhập thất bại', 'warn');
       // 恢复按钮状态
       isSubmitting = false;
       btn.disabled = false;
@@ -87,21 +87,21 @@ async function doLogin(){
     
     // 兜底：进入 loading 页面轮询
     if (window.AuthGuard && window.AuthGuard.goLoading){
-      window.AuthGuard.goLoading(target, '正在登录…', { force: true });
+      window.AuthGuard.goLoading(target, 'Đang đăng nhập…', { force: true });
     }else{
-      location.replace('/templates/loading.html?redirect=' + encodeURIComponent(target) + '&status=' + encodeURIComponent('正在登录…') + '&force=1');
+      location.replace('/templates/loading.html?redirect=' + encodeURIComponent(target) + '&status=' + encodeURIComponent('Đang đăng nhập…') + '&force=1');
     }
     return;
   }catch(e){
     // 网络错误或其他异常，显示错误并进入 loading
-    err.textContent = '网络错误，请重试';
-    await showToast('网络连接失败，请检查网络后重试', 'warn');
+    err.textContent = 'Lỗi mạng, vui lòng thử lại';
+    await showToast('Kết nối mạng thất bại, vui lòng kiểm tra mạng và thử lại', 'warn');
     // 恢复按钮状态
     isSubmitting = false;
     btn.disabled = false;
     btn.textContent = original;
     // 仍然进入 loading 作为兜底
-    location.replace('/templates/loading.html?status=' + encodeURIComponent('正在登录…') + '&force=1');
+    location.replace('/templates/loading.html?status=' + encodeURIComponent('Đang đăng nhập…') + '&force=1');
     return;
   }finally{
     // 确保按钮状态恢复（防止某些异常情况）
