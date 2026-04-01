@@ -47,7 +47,11 @@ export async function handleMailboxesApi(request, db, mailDomains, url, path, op
     const lengthParam = Number(url.searchParams.get('length') || 0);
     const randomId = generateRandomId(lengthParam || undefined);
     const domains = isMock ? MOCK_DOMAINS : domainConfigs.map(item => item.domain);
-    const domainIdx = Math.max(0, Math.min(domains.length - 1, Number(url.searchParams.get('domainIndex') || 0)));
+    const queryDomainIndex = url.searchParams.get('domainIndex');
+    const domainIdx = resolveDomainIndex(domains, {
+      explicit: queryDomainIndex !== null,
+      value: queryDomainIndex,
+    });
     const chosenDomain = domains[domainIdx] || domains[0];
     const chosenDomainConfig = isMock ? null : (domainConfigs[domainIdx] || domainConfigs[0] || null);
     const email = `${randomId}@${chosenDomain}`;
@@ -79,7 +83,10 @@ export async function handleMailboxesApi(request, db, mailDomains, url, path, op
         const valid = /^[a-z0-9._-]{1,64}$/i.test(local);
         if (!valid) return errorResponse('非法用户名', 400);
         const domains = MOCK_DOMAINS;
-        const domainIdx = Math.max(0, Math.min(domains.length - 1, Number(body.domainIndex || 0)));
+        const domainIdx = resolveDomainIndex(domains, {
+          explicit: Object.prototype.hasOwnProperty.call(body, 'domainIndex'),
+          value: body.domainIndex,
+        });
         const chosenDomain = domains[domainIdx] || domains[0];
         const email = `${local}@${chosenDomain}`;
         return Response.json({ email, expires: Date.now() + 3600000 });
@@ -92,7 +99,10 @@ export async function handleMailboxesApi(request, db, mailDomains, url, path, op
       const valid = /^[a-z0-9._-]{1,64}$/i.test(local);
       if (!valid) return errorResponse('非法用户名', 400);
       const domains = domainConfigs.map(item => item.domain);
-      const domainIdx = Math.max(0, Math.min(domains.length - 1, Number(body.domainIndex || 0)));
+      const domainIdx = resolveDomainIndex(domains, {
+        explicit: Object.prototype.hasOwnProperty.call(body, 'domainIndex'),
+        value: body.domainIndex,
+      });
       const chosenDomain = domains[domainIdx] || domains[0];
       const chosenDomainConfig = domainConfigs[domainIdx] || domainConfigs[0] || null;
       const email = `${local}@${chosenDomain}`;
@@ -472,6 +482,19 @@ async function createMailboxWithOptionalRoute({ db, email, env, domainConfig = n
     }
     throw error;
   }
+}
+
+function resolveDomainIndex(domains, { explicit, value }) {
+  if (!Array.isArray(domains) || domains.length === 0) return 0;
+
+  const maxIndex = domains.length - 1;
+  if (!explicit) {
+    return Math.floor(Math.random() * domains.length);
+  }
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, Math.min(maxIndex, Math.trunc(parsed)));
 }
 
 function resolveDomainConfigs(mailDomains, env = {}) {
