@@ -136,7 +136,8 @@ export async function handleMailboxAdminApi(request, db, url, path, options) {
 
       for (const row of rows) {
         const address = String(row?.address || '').trim().toLowerCase();
-        if (!address) continue;
+        const mailboxId = Number(row?.id || 0);
+        if (!address || !mailboxId) continue;
         try {
           const cleanup = await deleteWorkerRouteForMailbox(
             address,
@@ -144,20 +145,32 @@ export async function handleMailboxAdminApi(request, db, url, path, options) {
             row?.routing_rule_id || '',
             findDomainConfigForAddress(address, domainConfigs)
           );
-          if (cleanup?.deleted || cleanup?.status === 'not_found') {
-            await setMailboxRoutingRuleId(db, address, null);
+          if (!(cleanup?.deleted || cleanup?.status === 'not_found')) {
+            throw new Error(cleanup?.message || '未能删除 Cloudflare 路由规则');
           }
+
+          try { await db.exec('BEGIN'); } catch (_) { }
+          await db.prepare('DELETE FROM messages WHERE mailbox_id = ?').bind(mailboxId).run();
+          await db.prepare('DELETE FROM user_mailboxes WHERE mailbox_id = ?').bind(mailboxId).run();
+          await db.prepare('DELETE FROM mailboxes WHERE id = ?').bind(mailboxId).run();
+          try { await db.exec('COMMIT'); } catch (_) { }
+
+          invalidateMailboxCache(address);
+          invalidateSystemStatCache('total_mailboxes');
+
           successCount += 1;
           results.push({
             address,
             success: true,
             status: cleanup?.status || 'ok',
+            deleted_mailbox: true,
             rule_id: row?.routing_rule_id || null,
             expires_at: row?.expires_at || null,
             last_accessed_at: row?.last_accessed_at || null,
             message: cleanup?.message || '',
           });
         } catch (error) {
+          try { await db.exec('ROLLBACK'); } catch (_) { }
           failureCount += 1;
           results.push({
             address,
