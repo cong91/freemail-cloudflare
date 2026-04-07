@@ -23,6 +23,8 @@ export function resolveMailDomainConfigs(env = {}) {
 	}));
 }
 
+const workerIdCache = new Map();
+
 export function getCloudflareEmailRoutingConfig(env = {}) {
 	const apiToken = String(
 		env.CLOUDFLARE_EMAIL_ROUTING_API_TOKEN ||
@@ -49,6 +51,11 @@ export function getCloudflareEmailRoutingConfig(env = {}) {
 			env.CLOUDFLARE_WORKER_NAME ||
 			"",
 	).trim();
+	const workerId = String(
+		env.CLOUDFLARE_EMAIL_ROUTING_WORKER_ID ||
+			env.CF_EMAIL_ROUTING_WORKER_ID ||
+			"",
+	).trim();
 	const hasTokenAuth = Boolean(apiToken);
 	const hasGlobalKeyAuth = Boolean(apiEmail && globalApiKey);
 	const configured = Boolean(
@@ -63,6 +70,7 @@ export function getCloudflareEmailRoutingConfig(env = {}) {
 		zoneId,
 		accountId,
 		workerName,
+		workerId,
 		missing: [
 			!(hasTokenAuth || hasGlobalKeyAuth)
 				? "CLOUDFLARE_API_TOKEN 或 CLOUDFLARE_API_EMAIL + CLOUDFLARE_GLOBAL_API_KEY"
@@ -297,9 +305,35 @@ export async function listWorkersRaw(env = {}) {
 	return Array.isArray(data?.result) ? data.result : [];
 }
 
+async function resolveWorkerId(config) {
+	if (config.workerId) return config.workerId;
+	if (!config.accountId || !config.workerName) {
+		return "";
+	}
+	const cacheKey = `${config.accountId}:${config.workerName}`;
+	if (workerIdCache.has(cacheKey)) return workerIdCache.get(cacheKey);
+	try {
+		const workers = await cfRequest(
+			config,
+			`/accounts/${config.accountId}/workers/scripts`,
+		);
+		const list = Array.isArray(workers?.result) ? workers.result : [];
+		const matched = list.find((item) => String(item?.id || item?.name || item?.script || "").trim() === config.workerName || String(item?.name || "").trim() === config.workerName);
+		const workerId = String(matched?.id || matched?.script || matched?.name || "").trim();
+		if (workerId) {
+			workerIdCache.set(cacheKey, workerId);
+			return workerId;
+		}
+	} catch (_) {
+		// Optional fallback path only; worker-name routing is still valid for current zone API contract.
+	}
+	return "";
+}
+
 async function createRule(config, email) {
+	const workerId = await resolveWorkerId(config);
 	let lastError = null;
-	for (const payload of buildRulePayloadCandidates(email, config.workerName)) {
+	for (const payload of buildRulePayloadCandidates(email, config.workerName, workerId, 0)) {
 		try {
 			const response = await cfRequest(
 				config,
@@ -318,10 +352,12 @@ async function createRule(config, email) {
 }
 
 async function upsertRule(config, email, ruleId, priority = 0) {
+	const workerId = await resolveWorkerId(config);
 	let lastError = null;
 	for (const payload of buildRulePayloadCandidates(
 		email,
 		config.workerName,
+		workerId,
 		priority,
 	)) {
 		try {
@@ -341,7 +377,7 @@ async function upsertRule(config, email, ruleId, priority = 0) {
 	throw lastError || new Error("更新 Cloudflare 收件规则失败");
 }
 
-function buildRulePayloadCandidates(email, workerName, priority = 0) {
+function buildRulePayloadCandidates(email, workerName, workerId = "", priority = 0) {
 	const matcher = [
 		{
 			type: "literal",
@@ -354,7 +390,7 @@ function buildRulePayloadCandidates(email, workerName, priority = 0) {
 		matchers: matcher,
 	};
 
-	return [
+	const payloads = [
 		{ ...base, actions: [{ type: "worker", value: [workerName] }] },
 		{ ...base, name: "", actions: [{ type: "worker", value: [workerName] }] },
 		{
@@ -365,8 +401,15 @@ function buildRulePayloadCandidates(email, workerName, priority = 0) {
 		},
 		{ ...base, priority, actions: [{ type: "worker", value: [workerName] }] },
 		{ ...base, actions: [{ type: "worker", value: workerName }] },
-		{ ...base, actions: [{ type: "worker" }] },
 	];
+	if (workerId) {
+		payloads.push(
+			{ ...base, actions: [{ type: "worker", value: [workerId] }] },
+			{ ...base, actions: [{ type: "worker", value: workerId }] },
+			{ ...base, actions: [{ type: "worker", worker: { id: workerId } }] },
+		);
+	}
+	return payloads;
 }
 
 async function findRuleByAddress(config, email) {
@@ -420,16 +463,16 @@ function ruleMatchesAddress(rule, email) {
 	});
 }
 
-function ruleTargetsWorker(rule, workerName) {
+function ruleTargetsWorker(rule, workerNameOrId) {
 	const actions = Array.isArray(rule?.actions) ? rule.actions : [];
 	return actions.some((action) => {
 		if (String(action?.type || "").toLowerCase() !== "worker") return false;
 		const values = Array.isArray(action?.value)
 			? action.value
-			: [action?.value];
+			: [action?.value, action?.worker?.id, action?.worker?.name];
 		return values
 			.map((value) => String(value || "").trim())
-			.includes(workerName);
+			.includes(workerNameOrId);
 	});
 }
 
@@ -574,6 +617,11 @@ function normalizeDomainRoutingEntry(rawEntry) {
 			"accountId",
 			"account_id",
 			"CLOUDFLARE_ACCOUNT_ID",
+		]),
+		workerId: pickString(rawEntry, [
+			"workerId",
+			"worker_id",
+			"CLOUDFLARE_EMAIL_ROUTING_WORKER_ID",
 		]),
 	};
 }

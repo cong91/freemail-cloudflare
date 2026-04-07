@@ -12,7 +12,8 @@ export {
   toggleMailboxPin,
   getTotalMailboxCount,
   getForwardTarget,
-  setMailboxRoutingRuleId
+  setMailboxRoutingRuleId,
+  listExpiredMailboxesWithRouting
 } from './mailboxes.js';
 export {
   createUser,

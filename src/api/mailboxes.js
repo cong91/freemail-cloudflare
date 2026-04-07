@@ -340,6 +340,7 @@ export async function handleMailboxesApi(request, db, mailDomains, url, path, op
       
       // 构建计数查询的参数（不包含 limit 和 offset）
       const countBindParams = bindParams.slice(0, -2);
+      const includeTotal = ['1', 'true', 'yes'].includes(String(url.searchParams.get('include_total') || '').toLowerCase());
       
       // 严格管理员使用 LEFT JOIN 显示所有邮箱，同时保留自己的置顶状态
       // 普通用户使用 INNER JOIN 只显示自己关联的邮箱
@@ -347,15 +348,16 @@ export async function handleMailboxesApi(request, db, mailDomains, url, path, op
         // 严格管理员：显示所有邮箱，使用 LEFT JOIN 获取自己的置顶状态
         const adminBindParams = [uid, ...bindParams];
         const adminCountBindParams = [uid, ...countBindParams];
-        
-        // 获取总数
-        const countResult = await db.prepare(`
-          SELECT COUNT(*) as total
-          FROM mailboxes m
-          LEFT JOIN user_mailboxes um ON m.id = um.mailbox_id AND um.user_id = ?
-          ${whereClause}
-        `).bind(...adminCountBindParams).first();
-        const total = countResult?.total || 0;
+        let total;
+        if (includeTotal) {
+          const countResult = await db.prepare(`
+            SELECT COUNT(*) as total
+            FROM mailboxes m
+            LEFT JOIN user_mailboxes um ON m.id = um.mailbox_id AND um.user_id = ?
+            ${whereClause}
+          `).bind(...adminCountBindParams).first();
+          total = countResult?.total || 0;
+        }
         
         const { results } = await db.prepare(`
           SELECT m.id, m.address, m.created_at, COALESCE(um.is_pinned, 0) AS is_pinned,
@@ -368,16 +370,18 @@ export async function handleMailboxesApi(request, db, mailDomains, url, path, op
           ORDER BY COALESCE(um.is_pinned, 0) DESC, m.created_at DESC
           LIMIT ? OFFSET ?
         `).bind(...adminBindParams).all();
-        return Response.json({ list: results || [], total });
+        return Response.json(includeTotal ? { list: results || [], total } : { list: results || [], has_more: (results || []).length >= limit });
       } else if (strictAdmin) {
         // 严格管理员但没有 uid（不应该发生，但作为兜底）
-        // 获取总数
-        const countResult = await db.prepare(`
-          SELECT COUNT(*) as total
-          FROM mailboxes m
-          ${whereClause}
-        `).bind(...countBindParams).first();
-        const total = countResult?.total || 0;
+        let total;
+        if (includeTotal) {
+          const countResult = await db.prepare(`
+            SELECT COUNT(*) as total
+            FROM mailboxes m
+            ${whereClause}
+          `).bind(...countBindParams).first();
+          total = countResult?.total || 0;
+        }
         
         const { results } = await db.prepare(`
           SELECT m.id, m.address, m.created_at, 0 AS is_pinned,
@@ -389,17 +393,19 @@ export async function handleMailboxesApi(request, db, mailDomains, url, path, op
           ORDER BY m.created_at DESC
           LIMIT ? OFFSET ?
         `).bind(...bindParams).all();
-        return Response.json({ list: results || [], total });
+        return Response.json(includeTotal ? { list: results || [], total } : { list: results || [], has_more: (results || []).length >= limit });
       } else {
         // 普通用户：只显示自己关联的邮箱
-        // 获取总数
-        const countResult = await db.prepare(`
-          SELECT COUNT(*) as total
-          FROM user_mailboxes um
-          JOIN mailboxes m ON m.id = um.mailbox_id
-          ${whereClause}
-        `).bind(...countBindParams).first();
-        const total = countResult?.total || 0;
+        let total;
+        if (includeTotal) {
+          const countResult = await db.prepare(`
+            SELECT COUNT(*) as total
+            FROM user_mailboxes um
+            JOIN mailboxes m ON m.id = um.mailbox_id
+            ${whereClause}
+          `).bind(...countBindParams).first();
+          total = countResult?.total || 0;
+        }
         
         const { results } = await db.prepare(`
           SELECT m.id, m.address, m.created_at, um.is_pinned,
@@ -412,7 +418,7 @@ export async function handleMailboxesApi(request, db, mailDomains, url, path, op
           ORDER BY um.is_pinned DESC, m.created_at DESC
           LIMIT ? OFFSET ?
         `).bind(...bindParams).all();
-        return Response.json({ list: results || [], total });
+        return Response.json(includeTotal ? { list: results || [], total } : { list: results || [], has_more: (results || []).length >= limit });
       }
     } catch (_) {
       return Response.json({ list: [], total: 0 });
@@ -458,20 +464,23 @@ export async function handleMailboxesApi(request, db, mailDomains, url, path, op
 }
 
 async function createMailboxWithOptionalRoute({ db, email, env, domainConfig = null, userId = 0 }) {
+  const expiresAt = new Date(Date.now() + 3600000).toISOString();
   const routing = await ensureWorkerRouteForMailbox(email, env, domainConfig);
 
   try {
     if (userId) {
       await assignMailboxToUser(db, { userId, address: email });
+      await db.prepare('UPDATE mailboxes SET expires_at = COALESCE(expires_at, ?) WHERE address = ?')
+        .bind(expiresAt, email.toLowerCase()).run();
     } else {
-      await getOrCreateMailboxId(db, email);
+      await getOrCreateMailboxId(db, email, { expiresAt });
     }
 
     if (routing?.ruleId) {
       await setMailboxRoutingRuleId(db, email, routing.ruleId);
     }
 
-    return { email, routing };
+    return { email, routing, expiresAt };
   } catch (error) {
     if (routing?.created) {
       try {
@@ -498,6 +507,17 @@ function resolveDomainIndex(domains, { explicit, value }) {
 }
 
 function resolveDomainConfigs(mailDomains, env = {}) {
+  const resolved = resolveMailDomainConfigs(env)
+    .map(item => ({
+      domain: String(item?.domain || '').trim().toLowerCase(),
+      routing: item?.routing || null,
+    }))
+    .filter(item => item.domain);
+
+  if (resolved.length > 0) {
+    return resolved;
+  }
+
   if (Array.isArray(mailDomains) && mailDomains.length > 0 && typeof mailDomains[0] === 'object') {
     return mailDomains
       .map(item => ({
@@ -517,6 +537,6 @@ function resolveDomainConfigs(mailDomains, env = {}) {
     return [{ domain: mailDomains.trim().toLowerCase(), routing: null }];
   }
 
-  return resolveMailDomainConfigs(env);
+  return [];
 }
 

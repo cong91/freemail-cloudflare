@@ -18,9 +18,10 @@ import {
  * @returns {Promise<number>} 邮箱ID
  * @throws {Error} 当邮箱地址无效时抛出异常
  */
-export async function getOrCreateMailboxId(db, address) {
+export async function getOrCreateMailboxId(db, address, options = {}) {
   const normalized = String(address || '').trim().toLowerCase();
   if (!normalized) throw new Error('无效的邮箱地址');
+  const expiresAt = String(options.expiresAt || '').trim() || null;
   
   // 先检查缓存
   const cachedId = await getCachedMailboxId(db, normalized);
@@ -28,6 +29,10 @@ export async function getOrCreateMailboxId(db, address) {
     // 更新访问时间（使用后台任务，不阻塞主流程）
     db.prepare('UPDATE mailboxes SET last_accessed_at = CURRENT_TIMESTAMP WHERE id = ?')
       .bind(cachedId).run().catch(() => {});
+    if (expiresAt) {
+      db.prepare('UPDATE mailboxes SET expires_at = COALESCE(expires_at, ?) WHERE id = ?')
+        .bind(expiresAt, cachedId).run().catch(() => {});
+    }
     return cachedId;
   }
   
@@ -47,13 +52,16 @@ export async function getOrCreateMailboxId(db, address) {
     const id = existing.results[0].id;
     updateMailboxIdCache(normalized, id);
     await db.prepare('UPDATE mailboxes SET last_accessed_at = CURRENT_TIMESTAMP WHERE id = ?').bind(id).run();
+    if (expiresAt) {
+      await db.prepare('UPDATE mailboxes SET expires_at = COALESCE(expires_at, ?) WHERE id = ?').bind(expiresAt, id).run();
+    }
     return id;
   }
   
   // 创建新邮箱
   await db.prepare(
-    'INSERT INTO mailboxes (address, local_part, domain, password_hash, last_accessed_at) VALUES (?, ?, ?, NULL, CURRENT_TIMESTAMP)'
-  ).bind(normalized, local_part, domain).run();
+    'INSERT INTO mailboxes (address, local_part, domain, password_hash, last_accessed_at, expires_at) VALUES (?, ?, ?, NULL, CURRENT_TIMESTAMP, ?)'
+  ).bind(normalized, local_part, domain, expiresAt).run();
   
   // 查询新创建的ID
   const created = await db.prepare('SELECT id FROM mailboxes WHERE address = ? LIMIT 1').bind(normalized).all();
@@ -203,4 +211,28 @@ export async function setMailboxRoutingRuleId(db, address, ruleId) {
   await db.prepare(
     'UPDATE mailboxes SET routing_rule_id = ? WHERE address = ?'
   ).bind(ruleId || null, normalized).run();
+}
+
+export async function listExpiredMailboxesWithRouting(db, { limit = 100, staleHours = 0 } = {}) {
+  const normalizedLimit = Math.max(1, Math.min(500, Number(limit || 100)));
+  const staleHoursNum = Math.max(0, Number(staleHours || 0));
+  let query = `
+    SELECT id, address, routing_rule_id, expires_at, last_accessed_at, created_at
+    FROM mailboxes
+    WHERE routing_rule_id IS NOT NULL AND routing_rule_id != ''
+      AND (
+        (expires_at IS NOT NULL AND expires_at != '' AND datetime(expires_at) <= datetime('now'))
+  `;
+  const bindValues = [];
+  if (staleHoursNum > 0) {
+    query += ` OR (last_accessed_at IS NOT NULL AND last_accessed_at != '' AND datetime(last_accessed_at) <= datetime('now', ?))`;
+    bindValues.push(`-${Math.trunc(staleHoursNum)} hours`);
+  }
+  query += `)
+    ORDER BY datetime(COALESCE(expires_at, last_accessed_at, created_at)) ASC
+    LIMIT ?
+  `;
+  bindValues.push(normalizedLimit);
+  const result = await db.prepare(query).bind(...bindValues).all();
+  return result?.results || [];
 }

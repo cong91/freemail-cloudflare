@@ -18,7 +18,7 @@ import {
   ensureWorkerRouteForMailbox,
   resolveMailDomainConfigs
 } from '../integrations/cloudflare-email-routing.js';
-import { setMailboxRoutingRuleId } from '../db/index.js';
+import { setMailboxRoutingRuleId, listExpiredMailboxesWithRouting } from '../db/index.js';
 
 /**
  * 处理邮箱管理员相关 API
@@ -117,6 +117,68 @@ export async function handleMailboxAdminApi(request, db, url, path, options) {
       });
     } catch (error) {
       return errorResponse(`回填失败${error?.message ? `: ${error.message}` : ''}`, 500);
+    }
+  }
+
+  if (path === '/api/admin/cleanup-routing' && request.method === 'POST') {
+    if (isMock) return errorResponse('演示模式不可操作', 403);
+    if (!isStrictAdmin(request, options)) return errorResponse('Forbidden', 403);
+
+    try {
+      const body = await request.json().catch(() => ({}));
+      const limit = Math.max(1, Math.min(200, Number(body?.limit || url.searchParams.get('limit') || 100)));
+      const staleHours = Math.max(0, Number(body?.staleHours || url.searchParams.get('staleHours') || 0));
+      const rows = await listExpiredMailboxesWithRouting(db, { limit, staleHours });
+
+      const results = [];
+      let successCount = 0;
+      let failureCount = 0;
+
+      for (const row of rows) {
+        const address = String(row?.address || '').trim().toLowerCase();
+        if (!address) continue;
+        try {
+          const cleanup = await deleteWorkerRouteForMailbox(
+            address,
+            options?.env || {},
+            row?.routing_rule_id || '',
+            findDomainConfigForAddress(address, domainConfigs)
+          );
+          if (cleanup?.deleted || cleanup?.status === 'not_found') {
+            await setMailboxRoutingRuleId(db, address, null);
+          }
+          successCount += 1;
+          results.push({
+            address,
+            success: true,
+            status: cleanup?.status || 'ok',
+            rule_id: row?.routing_rule_id || null,
+            expires_at: row?.expires_at || null,
+            last_accessed_at: row?.last_accessed_at || null,
+            message: cleanup?.message || '',
+          });
+        } catch (error) {
+          failureCount += 1;
+          results.push({
+            address,
+            success: false,
+            rule_id: row?.routing_rule_id || null,
+            expires_at: row?.expires_at || null,
+            last_accessed_at: row?.last_accessed_at || null,
+            error: String(error?.message || '清理失败'),
+          });
+        }
+      }
+
+      return Response.json({
+        success: failureCount === 0,
+        processed: results.length,
+        success_count: successCount,
+        failure_count: failureCount,
+        results,
+      });
+    } catch (error) {
+      return errorResponse(`清理失败${error?.message ? `: ${error.message}` : ''}`, 500);
     }
   }
 
